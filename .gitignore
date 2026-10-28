@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+
+# Local-only daily notes — never commit
+docs/daily_notes/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# OS
+.DS_Store
