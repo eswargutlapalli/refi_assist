@@ -42,9 +42,9 @@ Resolved: split order settled by grill decision 12 (rate-first over remaining te
    Reason: the payoff priority is satisfied either way, so paying less overall is the next thing that borrower cares about.
    Rejected: falling back to payment; declaring a tie too close to call.
 
-10. Every tradeoff note states the payment change and the total-cost difference; adds the payoff change whenever the loans end at different times; "and" when both metrics favor the same option, "but" when they point opposite ways; never invents a tradeoff; too-close verdicts get the same note.
-    Reason: one-sided notes are the lender behavior this tool counters; the conjunction carries the direction honestly.
-    Rejected: warning only against the priority's spirit; omitting payoff timing; hedging "but" on clean wins.
+10. Every tradeoff note states the payment change and the total-cost difference; adds the payoff change whenever the loans end at different times; "and" when both metrics favor the same option, "but" when they point opposite ways; never invents a tradeoff; too-close verdicts get the same note. The note is framed from the chosen option's side: a keep verdict speaks as keep ("Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Your current loan pays off 36 months sooner."), a refinance verdict speaks as refinancing, and too-close keeps the refinance framing since there is no winner. Both sides use the same two-sentence shape — payment and total in the first sentence, payoff timing in its own second sentence.
+    Reason: one-sided notes are the lender behavior this tool counters; the conjunction carries the direction honestly. Framing from the winner's side makes the note explain the verdict instead of relitigating it — a keep headline followed by "Refinancing lowers…" argues the loser's case first.
+    Rejected: one fixed refinance-framed note for every outcome; warning only against the priority's spirit; omitting payoff timing; hedging "but" on clean wins.
 
 11. Headlines and tradeoff notes are code-written templates per priority and outcome (eleven wordings); under payoff priority any nonzero month gap wins outright, only equal months fall back.
     Templates (B = total difference, A = monthly difference, N = month gap, M = shared payoff month):

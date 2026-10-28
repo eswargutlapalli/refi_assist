@@ -7,9 +7,8 @@ are reproducible and checkable without the UI or the model.
 
 Scope: one existing auto loan, one refinance offer, explicit wait scenarios.
 Verdict rules (keep / refinance now / too close to call, headline, tradeoff
-note) are NOT here — they are settled in the /grill session and recorded in
-docs/DECISIONS.md. This module only reports numbers and the lowest-total-cost
-label.
+note) live in Section 5, settled by decisions 7-11 in docs/DECISIONS.md. The
+Comparison only reports numbers and the lowest-total-cost label.
 
 Layout:
     Section 1 — Inputs (CurrentLoan, RefinanceOffer, Comparison,
@@ -18,7 +17,8 @@ Layout:
     Section 3 — Calculation logic (payments, balances, schedules, cashflows)
     Section 4 — Options evaluation (plain comparisons, wait pricing and
                     breakeven thresholds)
-    Section 5 — Summary and verdict gate (pending /grill)
+    Section 5 — Verdict (code rules over a Comparison: choice, headline,
+                    tradeoff note)
 """
 
 from __future__ import annotations
@@ -256,15 +256,22 @@ def compare(
     # All three effects are computed on the actual current balance, so the
     # financed-fee burden (fee amount plus the interest it accrues) sits
     # entirely in costs_effect instead of leaking into term_effect.
+    # Rate-first order (decision 12): the rate leg is priced over the same
+    # remaining term, and the term leg prices the timeline change at the
+    # offered rate. The old term-first order credited the rate with savings
+    # on months the term extension created.
     base_unfinanced = _total(current.balance, offer.annual_rate, offer.term_months)
     financed_extra = refi_base_total - base_unfinanced  # 0 unless fees financed
-    # Same balance and term on both sides, so only the rate can differ here.
-    # Positive when the refi rate is lower (it saves money). Exactly 0 when
-    # the rates match (the regression the suite pins).
-    rate_effect = _total(current.balance, current.annual_rate, offer.term_months) - base_unfinanced
-    # Same balance and rate on both sides, so only the term differs here.
-    # Positive when the new term saves money, negative when it costs more.
-    term_effect = keep_total - _total(current.balance, current.annual_rate, offer.term_months)
+    same_term_at_offer_rate = _total(current.balance, offer.annual_rate, current.remaining_months)
+    # Same balance and term (the remaining months) on both sides, so only
+    # the rate can differ here. Positive when the refi rate is lower (it
+    # saves money). Exactly 0 when the rates match (the regression the
+    # suite pins).
+    rate_effect = keep_total - same_term_at_offer_rate
+    # Same balance and rate (the offered rate) on both sides, so only the
+    # term differs here. Positive when the new term saves money, negative
+    # when it costs more.
+    term_effect = same_term_at_offer_rate - base_unfinanced
     # Upfront charges plus any financed-fee burden work against savings.
     # Written as 0.0 minus the sum so a zero total is +0.0, never -0.0.
     costs_effect = 0.0 - (upfront_fees + current.prepayment_penalty + financed_extra)
@@ -430,13 +437,166 @@ def wait_breakeven_rate(
 
 
 # ============================================================================
-# Section 5 — Summary and verdict gate.
-# The Comparison above IS the summary the model narrates. The verdict itself
-# (keep / refinance now / too close to call, headline, tradeoff note) is built
-# here once /grill settles the rules and docs/DECISIONS.md records them.
+# Section 5 — Verdict: code rules over a Comparison, never model judgment.
+# The model explains the verdict but never changes, softens, or contradicts
+# it. Headlines and tradeoff notes are fixed templates (decisions 7-11 in
+# docs/DECISIONS.md); waiting is never a verdict, only a condition.
 # ============================================================================
 
 
-def verdict() -> None:
-    """Verdict rules live here once /grill settles them and docs/DECISIONS.md records them."""
-    raise NotImplementedError("verdict rules pending /grill session -> docs/DECISIONS.md")
+@dataclass(frozen=True)
+class Verdict:
+    """The code-written verdict the model narrates but cannot override."""
+
+    choice: str  # "keep", "refinance_now", or "too_close"
+    headline: str  # one of the eleven fixed templates, amounts comma-formatted
+    tradeoff_note: str  # payment change + total difference (+ payoff when terms
+    # differ), framed from the winner's side — refinance framing when too
+    # close, since there is no winner; "and" when both favor one side,
+    # "but" when they split
+
+
+# Margins are compared on the cent-rounded value, so a headline never says
+# "too close ... $100.00 apart": 99.996 rounds to $100.00 and names a winner.
+_TOTAL_CLOSE_MARGIN = 100.0
+_PAYMENT_CLOSE_MARGIN = 10.0
+
+_VALID_PRIORITIES = ("lowest_total_cost", "lowest_monthly_payment", "earliest_payoff")
+
+
+def _money(value: float) -> str:
+    # Display only; the engine never rounds its own math.
+    return f"${abs(value):,.2f}"
+
+
+def _cents(value: float) -> float:
+    # The whole-cent value the user would see, for margin comparisons.
+    return round(abs(value), 2)
+
+
+def _tradeoff_note(result: Comparison, choice: str) -> str:
+    """Payment change and total difference in one sentence, plus payoff timing
+    in its own second sentence when the loans end at different times. Framed
+    from the winner's side (decision 10): keep speaks as keep, refinancing
+    and too-close verdicts speak as refinancing."""
+    from_keep = choice == "keep"
+    pay_cents = _cents(result.monthly_change)
+    total_cents = _cents(result.total_savings)
+    if pay_cents == 0.0 and total_cents == 0.0:
+        note = "Both loans charge the same monthly payment and cost the same in total."
+    elif pay_cents == 0.0:
+        if from_keep:
+            total_phrase = (
+                f"you pay {_money(result.total_savings)} less in total"
+                if result.total_savings < 0
+                else f"refinancing saves you {_money(result.total_savings)} in total"
+            )
+            note = f"Your payment stays the same, and {total_phrase}."
+        else:
+            total_phrase = (
+                f"saves you {_money(result.total_savings)} in total"
+                if result.total_savings > 0
+                else f"costs {_money(result.total_savings)} more in total"
+            )
+            note = f"Refinancing leaves your payment unchanged, and {total_phrase}."
+    elif total_cents == 0.0:
+        if from_keep:
+            pay_phrase = (
+                f"Your payment is {_money(result.monthly_change)} a month lower"
+                if result.monthly_change > 0
+                else f"Your payment stays {_money(result.monthly_change)} a month higher"
+            )
+            note = f"{pay_phrase}, and the total cost is the same."
+        else:
+            pay_phrase = (
+                f"Refinancing lowers your payment by {_money(result.monthly_change)} a month"
+                if result.monthly_change < 0
+                else f"Refinancing raises your payment by {_money(result.monthly_change)} a month"
+            )
+            note = f"{pay_phrase}, and costs the same in total."
+    else:
+        if from_keep:
+            pay_phrase = (
+                f"Your payment is {_money(result.monthly_change)} a month lower"
+                if result.monthly_change > 0
+                else f"Your payment stays {_money(result.monthly_change)} a month higher"
+            )
+            total_phrase = (
+                f"refinancing saves you {_money(result.total_savings)} in total"
+                if result.total_savings > 0
+                else f"you pay {_money(result.total_savings)} less in total"
+            )
+        else:
+            pay_phrase = (
+                f"Refinancing lowers your payment by {_money(result.monthly_change)} a month"
+                if result.monthly_change < 0
+                else f"Refinancing raises your payment by {_money(result.monthly_change)} a month"
+            )
+            total_phrase = (
+                f"saves you {_money(result.total_savings)} in total"
+                if result.total_savings > 0
+                else f"costs {_money(result.total_savings)} more in total"
+            )
+        # "and" when payment and total favor the same side, "but" when they
+        # point opposite ways; never invents a tradeoff beyond these facts.
+        same_side = (result.monthly_change < 0) == (result.total_savings > 0)
+        note = f"{pay_phrase}, {'and' if same_side else 'but'} {total_phrase}."
+    if result.months_to_payoff_keep != result.months_to_payoff_refi:
+        gap = abs(result.months_to_payoff_refi - result.months_to_payoff_keep)
+        word = "month" if gap == 1 else "months"
+        if from_keep:
+            if result.months_to_payoff_keep < result.months_to_payoff_refi:
+                note += f" Your current loan pays off {gap} {word} sooner."
+            else:
+                note += f" Your current loan pays off {gap} {word} later."
+        elif result.months_to_payoff_refi < result.months_to_payoff_keep:
+            note += f" The refinance pays off {gap} {word} sooner."
+        else:
+            note += f" The refinance takes {gap} {word} longer to pay off."
+    return note
+
+
+def verdict(result: Comparison, priority: str = "lowest_total_cost") -> Verdict:
+    """Pick the winner by code rule and write its headline and tradeoff note.
+
+    Priorities are lowest_total_cost (default), lowest_monthly_payment, and
+    earliest_payoff. "Under" is strict on cent-rounded values: exactly $100.00
+    total (or $10.00 a month) picks a winner. A payoff-month tie falls back
+    to total cost. Anything else for priority raises ValueError.
+    """
+    if priority not in _VALID_PRIORITIES:
+        raise ValueError(
+            f"priority must be one of {_VALID_PRIORITIES}, got {priority!r}"
+        )
+    if priority == "lowest_total_cost":
+        total_cents = _cents(result.total_savings)
+        if total_cents < _TOTAL_CLOSE_MARGIN:
+            choice, headline = "too_close", f"Too close to call on total cost — {_money(result.total_savings)} apart."
+        elif result.total_savings > 0:
+            choice, headline = "refinance_now", f"Refinancing saves you {_money(result.total_savings)} in total."
+        else:
+            choice, headline = "keep", f"Keeping your loan costs {_money(result.total_savings)} less in total."
+    elif priority == "lowest_monthly_payment":
+        pay_cents = _cents(result.monthly_change)
+        if pay_cents < _PAYMENT_CLOSE_MARGIN:
+            choice, headline = "too_close", f"Too close to call on payment — {_money(result.monthly_change)} a month apart."
+        elif result.monthly_change < 0:
+            choice, headline = "refinance_now", f"Refinancing lowers your payment by {_money(result.monthly_change)} a month."
+        else:
+            choice, headline = "keep", f"Your current payment is {_money(result.monthly_change)} a month lower."
+    else:
+        keep_months = result.months_to_payoff_keep
+        refi_months = result.months_to_payoff_refi
+        if refi_months < keep_months:
+            gap = keep_months - refi_months
+            choice, headline = "refinance_now", f"Refinancing pays off {gap} {'month' if gap == 1 else 'months'} sooner."
+        elif keep_months < refi_months:
+            gap = refi_months - keep_months
+            choice, headline = "keep", f"Your current loan pays off first — {gap} {'month' if gap == 1 else 'months'} sooner."
+        elif _cents(result.total_savings) < _TOTAL_CLOSE_MARGIN:
+            choice, headline = "too_close", f"Too close to call — same payoff month and totals within {_money(result.total_savings)}."
+        elif result.total_savings > 0:
+            choice, headline = "refinance_now", f"Both loans pay off in {refi_months} months; refinancing costs {_money(result.total_savings)} less in total."
+        else:
+            choice, headline = "keep", f"Both loans pay off in {refi_months} months; keeping your loan costs {_money(result.total_savings)} less in total."
+    return Verdict(choice, headline, _tradeoff_note(result, choice))

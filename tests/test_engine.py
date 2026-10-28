@@ -570,7 +570,216 @@ def test_wait_plan_rejects_out_of_range():
         wait_breakeven_rate(current, offer, 48)
 
 
-def test_verdict_pending_grill():
-    # Verdict rules are unsettled until the /grill session; calling must fail loudly.
-    with pytest.raises(NotImplementedError):
-        verdict()
+def test_rate_first_split_on_trap():
+    # Rate-first (decision 12): rate over the same 36 months, term at 6%.
+    current = CurrentLoan(balance=15000.0, annual_rate=0.07, remaining_months=36)
+    result = compare(current, RefinanceOffer(annual_rate=0.06, term_months=72))
+    assert result.rate_effect == pytest.approx(245.79, abs=0.01)
+    assert result.term_effect == pytest.approx(-1470.87, abs=0.01)
+    assert result.costs_effect == pytest.approx(0.0)
+    assert result.rate_effect + result.term_effect + result.costs_effect == pytest.approx(result.total_savings)
+
+
+def test_rate_first_split_on_clear_win():
+    current = CurrentLoan(balance=25000.0, annual_rate=0.11, remaining_months=48)
+    result = compare(current, RefinanceOffer(annual_rate=0.075, term_months=48, fees=300.0))
+    assert result.rate_effect == pytest.approx(1999.94, abs=0.01)
+    assert result.term_effect == pytest.approx(0.0, abs=1e-6)
+    assert result.costs_effect == pytest.approx(-300.00)
+    assert result.rate_effect + result.term_effect + result.costs_effect == pytest.approx(result.total_savings)
+
+
+def test_rate_first_split_same_rate_longer_term():
+    current = CurrentLoan(balance=15000.0, annual_rate=0.07, remaining_months=36)
+    result = compare(current, RefinanceOffer(annual_rate=0.07, term_months=72))
+    assert result.rate_effect == pytest.approx(0.0, abs=1e-6)
+    assert result.term_effect == pytest.approx(-1739.29, abs=0.01)
+
+
+def test_rate_first_split_cash_fee_with_penalty():
+    current = CurrentLoan(balance=12486.20, annual_rate=0.069, remaining_months=22, prepayment_penalty=150.0)
+    result = compare(current, RefinanceOffer(annual_rate=0.0499, term_months=24, fees=195.0))
+    assert result.rate_effect == pytest.approx(236.44, abs=0.01)
+    assert result.term_effect == pytest.approx(-53.57, abs=0.01)
+    assert result.costs_effect == pytest.approx(-345.00)
+    assert result.rate_effect + result.term_effect + result.costs_effect == pytest.approx(result.total_savings)
+
+
+def test_rate_first_split_financed_fee_case():
+    current = CurrentLoan(balance=18450.0, annual_rate=0.089, remaining_months=41)
+    offer = RefinanceOffer(annual_rate=0.0549, term_months=48, fees=250.0, fees_financed=True)
+    result = compare(current, offer)
+    assert result.rate_effect == pytest.approx(1188.44, abs=0.01)
+    assert result.term_effect == pytest.approx(-315.41, abs=0.01)
+    assert result.costs_effect == pytest.approx(-279.02, abs=0.01)
+    assert result.rate_effect + result.term_effect + result.costs_effect == pytest.approx(result.total_savings)
+
+
+def _trap_comparison():
+    current = CurrentLoan(balance=15000.0, annual_rate=0.07, remaining_months=36)
+    return compare(current, RefinanceOffer(annual_rate=0.06, term_months=72))
+
+
+def _clear_win_comparison():
+    current = CurrentLoan(balance=25000.0, annual_rate=0.11, remaining_months=48)
+    return compare(current, RefinanceOffer(annual_rate=0.075, term_months=48, fees=300.0))
+
+
+def _close_call_comparison():
+    current = CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40)
+    return compare(current, RefinanceOffer(annual_rate=0.06, term_months=60))
+
+
+def _direct_comparison(total_savings, monthly_change, keep_months=40, refi_months=60):
+    # Boundary probe: only the margins matter, so the other fields are fixed.
+    return Comparison(
+        keep_monthly=500.0,
+        keep_total=20000.0,
+        refi_monthly=500.0 + monthly_change,
+        refi_total=20000.0 - total_savings,
+        total_savings=total_savings,
+        monthly_change=monthly_change,
+        cash_due_today=0.0,
+        months_to_payoff_keep=keep_months,
+        months_to_payoff_refi=refi_months,
+        keep_interest=1000.0,
+        refi_interest=1000.0 - total_savings,
+        breakeven_month=1,
+        rate_effect=0.0,
+        term_effect=total_savings,
+        costs_effect=0.0,
+        lowest_total_cost="keep" if total_savings < 0 else "refinance_now" if total_savings > 0 else "equal",
+    )
+
+
+def test_verdict_trap_lowest_total_cost_is_keep():
+    result = verdict(_trap_comparison(), "lowest_total_cost")
+    assert result.choice == "keep"
+    assert result.headline == "Keeping your loan costs $1,225.09 less in total."
+    assert result.tradeoff_note == ("Your payment stays $214.56 a month higher, "
+                                    "but you pay $1,225.09 less in total. "
+                                    "Your current loan pays off 36 months sooner.")
+
+
+def test_verdict_trap_lowest_monthly_payment_is_refinance():
+    result = verdict(_trap_comparison(), "lowest_monthly_payment")
+    assert result.choice == "refinance_now"
+    assert result.headline == "Refinancing lowers your payment by $214.56 a month."
+    assert result.tradeoff_note == ("Refinancing lowers your payment by $214.56 a month, "
+                                    "but costs $1,225.09 more in total. "
+                                    "The refinance takes 36 months longer to pay off.")
+
+
+def test_verdict_trap_earliest_payoff_is_keep():
+    result = verdict(_trap_comparison(), "earliest_payoff")
+    assert result.choice == "keep"
+    assert result.headline == "Your current loan pays off first — 36 months sooner."
+
+
+def test_verdict_clear_win_lowest_total_cost_is_refinance():
+    result = verdict(_clear_win_comparison(), "lowest_total_cost")
+    assert result.choice == "refinance_now"
+    assert result.headline == "Refinancing saves you $1,699.94 in total."
+    assert " and " in result.tradeoff_note
+    assert " but " not in result.tradeoff_note
+    assert "$41.67" in result.tradeoff_note
+    assert "pay off" not in result.tradeoff_note
+
+
+def test_verdict_clear_win_earliest_payoff_falls_back_to_total():
+    result = verdict(_clear_win_comparison(), "earliest_payoff")
+    assert result.choice == "refinance_now"
+    assert result.headline == "Both loans pay off in 48 months; refinancing costs $1,699.94 less in total."
+
+
+def test_verdict_close_call_on_total_cost_is_too_close_with_note():
+    result = verdict(_close_call_comparison(), "lowest_total_cost")
+    assert result.choice == "too_close"
+    assert result.headline == "Too close to call on total cost — $24.76 apart."
+    assert result.tradeoff_note == ("Refinancing lowers your payment by $193.95 a month, "
+                                    "and saves you $24.76 in total. "
+                                    "The refinance takes 20 months longer to pay off.")
+
+
+def test_verdict_close_call_earliest_payoff_keep_note_is_keep_framed():
+    result = verdict(_close_call_comparison(), "earliest_payoff")
+    assert result.choice == "keep"
+    assert result.headline == "Your current loan pays off first — 20 months sooner."
+    assert result.tradeoff_note == ("Your payment stays $193.95 a month higher, "
+                                    "and refinancing saves you $24.76 in total. "
+                                    "Your current loan pays off 20 months sooner.")
+
+
+def test_verdict_payoff_headline_uses_singular_month():
+    sooner = verdict(_direct_comparison(500.0, -50.0, 40, 39), "earliest_payoff")
+    assert sooner.choice == "refinance_now"
+    assert sooner.headline == "Refinancing pays off 1 month sooner."
+    first = verdict(_direct_comparison(-500.0, 50.0, 39, 40), "earliest_payoff")
+    assert first.choice == "keep"
+    assert first.headline == "Your current loan pays off first — 1 month sooner."
+
+
+def test_verdict_equal_totals_use_and_not_but():
+    result = verdict(_direct_comparison(0.0, -50.0, 48, 48), "lowest_total_cost")
+    assert result.choice == "too_close"
+    assert result.tradeoff_note == ("Refinancing lowers your payment by $50.00 a month, "
+                                    "and costs the same in total.")
+
+
+def test_verdict_keep_side_equal_totals_keep_subject():
+    result = verdict(_direct_comparison(0.001, 50.0, 48, 48), "lowest_monthly_payment")
+    assert result.choice == "keep"
+    assert result.tradeoff_note == ("Your payment is $50.00 a month lower, "
+                                    "and the total cost is the same.")
+
+
+def test_verdict_keep_side_and_path_when_keep_payment_lower():
+    result = verdict(_direct_comparison(-500.0, 50.0, 48, 48), "lowest_total_cost")
+    assert result.choice == "keep"
+    assert result.tradeoff_note == ("Your payment is $50.00 a month lower, "
+                                    "and you pay $500.00 less in total.")
+
+
+def test_verdict_keep_note_when_refinance_pays_off_sooner():
+    result = verdict(_direct_comparison(-500.0, 20.0, 60, 48), "lowest_total_cost")
+    assert result.choice == "keep"
+    assert result.tradeoff_note == ("Your payment is $20.00 a month lower, "
+                                    "and you pay $500.00 less in total. "
+                                    "Your current loan pays off 12 months later.")
+
+
+def test_verdict_close_call_on_payment_is_refinance():
+    result = verdict(_close_call_comparison(), "lowest_monthly_payment")
+    assert result.choice == "refinance_now"
+    assert result.headline == "Refinancing lowers your payment by $193.95 a month."
+
+
+def test_verdict_total_margin_boundary_is_strict():
+    assert verdict(_direct_comparison(99.99, -50.0), "lowest_total_cost").choice == "too_close"
+    assert verdict(_direct_comparison(100.00, -50.0), "lowest_total_cost").choice == "refinance_now"
+
+
+def test_verdict_total_margin_uses_cents_rounded_value():
+    # 99.996 displays as $100.00, so the headline must name a winner, never
+    # "too close ... $100.00 apart".
+    result = verdict(_direct_comparison(99.996, -50.0), "lowest_total_cost")
+    assert result.choice == "refinance_now"
+    assert "Too close" not in result.headline
+    assert "$100.00" in result.headline
+
+
+def test_verdict_payment_margin_boundary_is_strict():
+    assert verdict(_direct_comparison(500.0, -9.99), "lowest_monthly_payment").choice == "too_close"
+    assert verdict(_direct_comparison(500.0, -10.00), "lowest_monthly_payment").choice == "refinance_now"
+    assert verdict(_direct_comparison(-500.0, 10.00), "lowest_monthly_payment").choice == "keep"
+
+
+def test_verdict_unknown_priority_raises():
+    with pytest.raises(ValueError):
+        verdict(_trap_comparison(), "lowest_payment")
+    with pytest.raises(ValueError):
+        verdict(_trap_comparison(), "cheapest")
+
+
+def test_verdict_defaults_to_lowest_total_cost():
+    assert verdict(_trap_comparison()).choice == "keep"
