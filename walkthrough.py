@@ -109,8 +109,71 @@ for wait_months in (3, 6):
               f"only in scenarios at or below {answer.rate:.4%}")
 print()
 
-print("== Section 5 — Summary and verdict gate ==")
-try:
-    verdict()
-except NotImplementedError as exc:
-    print(f"verdict() -> NotImplementedError: {exc}")
+print("== Section 5 — Verdict (code rules, fixed templates) ==")
+for priority in ("lowest_total_cost", "lowest_monthly_payment", "earliest_payoff"):
+    call = verdict(result, priority)
+    print(f"verdict(priority={priority}) -> choice={call.choice}")
+    print(f"  headline: {call.headline}")
+    print(f"  note: {call.tradeoff_note}")
+print()
+
+
+print("== Scenarios — step-by-step trace of compare() + verdict() ==")
+SCENARIOS = [
+    ("payment trap (longer term buries the win)",
+     CurrentLoan(balance=15000.0, annual_rate=0.07, remaining_months=36),
+     RefinanceOffer(annual_rate=0.06, term_months=72)),
+    ("clear win (same term, lower rate)",
+     CurrentLoan(balance=25000.0, annual_rate=0.11, remaining_months=48),
+     RefinanceOffer(annual_rate=0.075, term_months=48, fees=300.0)),
+    ("too close to call on total ($24.76 apart)",
+     CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40),
+     RefinanceOffer(annual_rate=0.06, term_months=60)),
+    ("financed fee (fee + its interest sit in costs)",
+     CurrentLoan(balance=18450.0, annual_rate=0.089, remaining_months=41),
+     RefinanceOffer(annual_rate=0.0549, term_months=48, fees=250.0, fees_financed=True)),
+]
+
+
+def trace(name, current, offer):
+    print(f"--- {name} ---")
+    print(f"inputs: balance={money(current.balance)} rate={current.annual_rate:.4%} "
+          f"left={current.remaining_months}mo penalty={money(current.prepayment_penalty)} "
+          f"-> offer rate={offer.annual_rate:.4%} term={offer.term_months}mo "
+          f"fees={money(offer.fees)} financed={offer.fees_financed}")
+    # Step 1: monthly payments straight from the amortization formula.
+    keep_pay = monthly_payment(current.balance, current.annual_rate, current.remaining_months)
+    new_balance = current.balance + (offer.fees if offer.fees_financed else 0.0)
+    refi_pay = monthly_payment(new_balance, offer.annual_rate, offer.term_months)
+    print(f"step 1 payments: keep={money(keep_pay)}/mo refi={money(refi_pay)}/mo "
+          f"change={money(refi_pay - keep_pay)}/mo")
+    # Step 2: headline totals from compare(); savings > 0 means refinancing saves.
+    out = compare(current, offer)
+    print(f"step 2 totals: keep={money(out.keep_total)} refi={money(out.refi_total)} "
+          f"savings={money(out.total_savings)} cash_due_today={money(out.cash_due_today)}")
+    # Step 3: rate-first split legs, recomputed here so each leg is visible:
+    # rate prices the new rate over the SAME remaining term, term prices the
+    # timeline change at the offered rate, costs carry fees/penalty/burden.
+    same_term = monthly_payment(current.balance, offer.annual_rate, current.remaining_months)
+    same_term_total = same_term * current.remaining_months
+    new_term = monthly_payment(current.balance, offer.annual_rate, offer.term_months)
+    new_term_total = new_term * offer.term_months
+    print(f"step 3 split legs: same-term@{offer.annual_rate:.4%}={money(same_term_total)} "
+          f"new-term-unfinanced={money(new_term_total)}")
+    print(f"  rate_effect={money(out.rate_effect)} (= keep - same-term)")
+    print(f"  term_effect={money(out.term_effect)} (= same-term - new-term)")
+    print(f"  costs_effect={money(out.costs_effect)} (= new-term - real offer)")
+    print(f"  check: split sum={money(out.rate_effect + out.term_effect + out.costs_effect)} "
+          f"== savings={money(out.total_savings)}")
+    # Step 4: breakeven and the engine's cheapest-total label (ties -> equal).
+    print(f"step 4 breakeven_month={out.breakeven_month} lowest_total_cost={out.lowest_total_cost}")
+    # Step 5: code-written verdict per priority — the model only narrates this.
+    for priority in ("lowest_total_cost", "lowest_monthly_payment", "earliest_payoff"):
+        call = verdict(out, priority)
+        print(f"step 5 [{priority}] -> {call.choice}: {call.headline}")
+        print(f"  note: {call.tradeoff_note}")
+
+
+for _name, _current, _offer in SCENARIOS:
+    trace(_name, _current, _offer)
+    print()
