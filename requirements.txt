@@ -1,0 +1,8 @@
+# Runtime + test dependencies for the Auto-Refinance Decision Assistant.
+# Python 3.10+ (uses X | Y annotations). Install with:
+#   pip install -r requirements.txt
+# streamlit lands here with app.py (plan step 3); nothing else is imported yet.
+
+openai==3.35.1      # Meta Model API client (base https://api.meta.ai/v1)
+pydantic==2.14.1    # StrictModel schemas for model output (rule 3.9)
+pytest==9.1.1       # test runner (tests/)
