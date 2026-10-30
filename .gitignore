@@ -1,8 +1,12 @@
 # Secrets — never commit
 .env
+.streamlit/
 
 # Local-only daily notes — never commit
 docs/daily_notes/
+
+# Agent plans and scratch notes — local working material, never submit
+.agents/
 
 # Python
 __pycache__/
