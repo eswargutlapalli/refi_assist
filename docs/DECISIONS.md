@@ -65,3 +65,10 @@ Resolved: split order settled by grill decision 12 (rate-first over remaining te
     Rejected: clearing all word-form terms for the user (safe but punitive); letting the model convert words unchecked (math in the model).
    Addendum (Oct 30, live-verified): digit-plus-scale phrases report the full amount ('30 thousands' → 30000, never the bare 30 — code rejects the bare digit as ungrounded), and quotes name the term with its amount ('balance 30 thousands', not '30 thousands') so attribution holds. Continue on page 1 parses both statements; re-parse runs only when the text changed.
 
+14. Confirm-gate blank rule (Oct 30): a blank penalty/fees field means different things by provenance. Unstated (the statement never mentioned it) — blank means none, Confirm passes. Cleared (the statement said something we couldn't verify, e.g. "2% of the remaining balance") — blank blocks Confirm with "couldn't verify, please enter"; an explicit 0 is accepted.
+    Reason: silently treating a cleared value as $0 bakes the likeliest wrong number into the comparison; the user typing 0 keeps the decision visible and the user's own.
+    Rejected: blank always means none (hides unverified fees); blank always blocks (punishes the common no-fee case with typing for nothing).
+
+15. Wait section order (Oct 30): thresholds table first ("only if rates fall below X%", against today's cheaper option, offer rate on its own line), then the try-a-rate what-if as a two-column table (today's cheaper option vs "wait N months, then refinance at R%", with old payment during the wait, then the new one, totals, and payoff in N months), closed by one tradeoff line ("saves $A in total, but you finish N months later").
+    Reason: the earlier mixed sentences repeated totals, never said $X/mo was the post-wait payment, and hid that waiting extends payoff.
+    Rejected: keeping the three-sentence what-if plus threshold blend.

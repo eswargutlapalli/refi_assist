@@ -6,3 +6,4 @@
 openai==3.35.1      # Meta Model API client (base https://api.meta.ai/v1)
 pydantic==2.14.1    # StrictModel schemas for model output (rule 3.9)
 pytest==9.1.1       # test runner (tests/)
+streamlit==1.66.1   # confirm-gate UI (app.py); run with streamlit run app.py
