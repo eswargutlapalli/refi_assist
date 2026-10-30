@@ -37,11 +37,13 @@ EXTRACT_PROMPT_CACHE_KEY = "refi-extract-v1"  # Own key: different stable prefix
 
 _EXTRACTION_INSTRUCTIONS = (
     "Copy loan terms from the borrower's statement. For each term reply with "
-    "the number exactly as written and the exact quote you copied it from. "
-    "Never calculate, convert, or round: copy. Percent stays a percent "
-    "(7.5 for 'APR 7.5%'). Terms written as words take digits ('thirty seven' "
-    "→ 37); the quote stays word-for-word. If a term is not stated, use null "
-    "for both value and quote. Reply with JSON only."
+    "the amount as digits and the shortest exact quote naming the term with "
+    "its amount ('balance 30 thousands', not '30 thousands'), word-for-word. "
+    "Report the full stated amount: 'thirty seven' → 37, "
+    "'30 thousands' → 30000 (never the bare 30). Beyond that, never "
+    "calculate, convert, or round: percent stays a percent (7.5 for "
+    "'APR 7.5%'). If a term is not stated, use null for both value and "
+    "quote. Reply with JSON only."
 )
 
 _LOAN_EXTRA = (
@@ -219,10 +221,17 @@ def _word_amounts(text: str) -> list[float]:
     ]
 
 
+# A digit run a scale word owns ("30 thousands") is one amount, stated by
+# the word parser as 30000 — the bare 30 is never a second amount, the same
+# way a cents phrase owns its digits.
+_SCALE_AFTER_RE = re.compile(r"\s*(?:thousands?|millions?|billions?|hundreds?)\b", re.IGNORECASE)
+
+
 def _digit_hits(text: str) -> list[tuple[float, int, int, bool]]:
     """(value, char start, char end, is_cent) for each digit run. A cents
     phrase yields hundredths ("51 cents" → 0.51); the raw 51 is never emitted
-    as dollars."""
+    as dollars. A digit a scale word follows ("30 thousands") is skipped;
+    the word run states 30000 instead."""
     hits = []
     for match in _NUMBER_RE.finditer(text):
         raw = match.group(0)
@@ -230,6 +239,8 @@ def _digit_hits(text: str) -> list[tuple[float, int, int, bool]]:
             hits.append(
                 (float(raw.replace(",", "")) / 100, match.start(), match.end(), True)
             )
+        elif _SCALE_AFTER_RE.match(text[match.end():]):
+            continue
         else:
             hits.append((float(raw.replace(",", "")), match.start(), match.end(), False))
     return hits
@@ -535,6 +546,7 @@ def check_field(
             value == 0
             and _has_zero_word(strs, quote)
             and any(_is_field_word(field, tok) for tok in strs)
+            and not _has_competitor(field, 0.0, source)
         )
     _, all_occs = _occurrences(quote)
     occs = [
@@ -543,6 +555,24 @@ def check_field(
     for occ in occs:
         if _unit_ok(field, strs, occ) and field in _attribute(
             strs, toks, quote, occ, all_occs
+        ):
+            return not _has_competitor(field, value, source)
+    return False
+
+
+def _has_competitor(field: str, value: float, source: str) -> bool:
+    """A distinct stated amount in the source that also attributes to the
+    field: two copies, no trustworthy pick. Both statements pasted in one
+    box grounds neither rate — the borrower picks. Equal amounts (digit
+    and word runs of one number) never compete."""
+    src_toks = _tokenize(source)
+    src_strs = [tok for tok, _, _ in src_toks]
+    _, src_occs = _occurrences(source)
+    for occ in src_occs:
+        if math.isclose(occ.value, value, rel_tol=1e-9):
+            continue
+        if _unit_ok(field, src_strs, occ) and field in _attribute(
+            src_strs, src_toks, source, occ, src_occs
         ):
             return True
     return False
@@ -606,10 +636,11 @@ def _retry_feedback(bad: list[str]) -> str:
     # Never the expected values, or the retry is worthless.
     return (
         "These fields were not grounded (" + ", ".join(bad) + "): each quote "
-        "must appear word-for-word in the statement and must state the value "
-        "you reported — the number itself, or for fees_financed the words "
-        "saying who pays the fees. Copy exact quotes from the statement; use "
-        "null for both value and quote when the statement does not state a term."
+        "must appear word-for-word in the statement, must name the term, and "
+        "must state the value you reported — the number itself, or for "
+        "fees_financed the words saying who pays the fees. Copy exact quotes "
+        "from the statement; use null for both value and quote when the "
+        "statement does not state a term."
     )
 
 

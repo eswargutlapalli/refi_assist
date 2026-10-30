@@ -191,6 +191,36 @@ def test_cents_phrase_suppresses_raw_digits():
     assert check_field(51.0, "Fee $51", "Fee $51", field="fees") is True
 
 
+def test_competing_amount_in_source_clears():
+    # Both statements pasted in one box: two rates each attribute to the
+    # field, so neither copy is trustworthy — the user must pick.
+    source = ("Balance of 68713.23 with rate at 6.29% and remaining 45 months. "
+              "Rate 5.99% with 48 months to maturity.")
+    assert check_field(5.99, "Rate 5.99%", source, field="annual_rate_pct") is False
+    assert check_field(6.29, "rate at 6.29%", source, field="annual_rate_pct") is False
+    # Separated, each grounds: the rule only fires on genuine competition.
+    assert check_field(6.29, "rate at 6.29%",
+                       "Balance of 68713.23 with rate at 6.29%.",
+                       field="annual_rate_pct") is True
+    assert check_field(5.99, "Rate 5.99%", "Rate 5.99% with 48 months to maturity.",
+                       field="annual_rate_pct") is True
+
+
+def test_digit_before_scale_word_belongs_to_that_amount():
+    from extract import numbers_in
+
+    # "30 thousands" states one amount: $30,000. The bare 30 must not validate.
+    assert numbers_in("balance 30 thousands") == [30000.0]
+    assert numbers_in("balance 30 thousand") == [30000.0]
+    assert check_field(30.0, "balance 30 thousands", "balance 30 thousands",
+                       field="balance") is False
+    assert check_field(30000.0, "balance 30 thousands", "balance 30 thousands",
+                       field="balance") is True
+    # Regression: digits with no following scale word still count.
+    assert check_field(43.0, "43 months", "43 months",
+                       whole=True, field="remaining_months") is True
+
+
 def test_month_fields_require_month_or_payment_word():
     assert check_field(5.0, "5 years", "Term: 5 years",
                        whole=True, field="remaining_months") is False
