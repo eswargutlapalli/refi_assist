@@ -58,3 +58,8 @@ Resolved: split order settled by grill decision 12 (rate-first over remaining te
 12. (Resolves provisional split order.) Rate effect is measured first, over the same remaining term; term effect prices the timeline change at the offered rate. Display uses directional labels and words, never signs: "Lower rate: saves $X" / "Higher rate: costs $X", "Longer term: costs $X" / "Shorter term: saves $X", "Fees and charges: costs $X". Engine keeps signed numbers; wording is display only.
     Reason: the current order credits the rate with savings on months the term extension created; rate-first keeps each effect on the timeline it belongs to.
     Rejected: keeping term-first attribution; showing + / − signs to users.
+
+13. Word-form numbers ground, and code parses every number in whatever form before it reaches the engine.
+    Statements arrive in digits ("37"), words ("thirty seven"), or mixed ("fifty one dollars and 51 cents"). The model reports digits either way; the quote scanner parses both — ones through billions, hyphenated compounds, dollars-and-cents combined, percent markers — and grounding still demands quote-in-source plus value-among-numbers, with the user confirming the digits at the gate.
+    Reason: refusing word forms would clear correctly-read values and push trivial typing onto the borrower; parsing in code keeps the copy-vs-calculate split (rule 3.1) while the confirm gate stays the backstop against misparses.
+    Rejected: clearing all word-form terms for the user (safe but punitive); letting the model convert words unchecked (math in the model).
