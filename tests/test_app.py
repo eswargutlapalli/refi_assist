@@ -399,12 +399,10 @@ def test_describe_thresholds_heading_names_baseline_not_offer_rate():
 def test_today_column_labels_tied_options():
     from app import today_column_label
 
-    assert today_column_label("equal", 23224.12) == (
-        "Today: today's tied options (shown: keeping your loan) ($23,224.12)"
+    assert today_column_label("equal") == (
+        "Today: today's tied options (shown: keeping your loan)"
     )
-    assert today_column_label("keep", 23224.12) == (
-        "Today: keeping your loan ($23,224.12)"
-    )
+    assert today_column_label("keep") == "Today: keeping your loan"
 
 
 def test_describe_wait_result_exact_branches():
@@ -502,3 +500,68 @@ def test_split_rows_same_rate_names_no_difference():
     assert result.rate_effect == 0
     rows = split_rows(result)
     assert rows[0] == "Same rate: no difference."
+
+
+def test_escape_display_escapes_dollar_pairs_raw_stays_plain():
+    from app import escape_display, format_money
+
+    raw = ("Your payment stays $104.68 a month higher, "
+           "but you pay $129.54 less in total.")
+    assert escape_display(raw) == (
+        "Your payment stays \\$104.68 a month higher, "
+        "but you pay \\$129.54 less in total."
+    )
+    assert raw == ("Your payment stays $104.68 a month higher, "
+                   "but you pay $129.54 less in total.")
+    assert format_money(104.68) == "$104.68"
+
+
+def test_wait_option_label_names_months():
+    from app import wait_option_label
+
+    assert wait_option_label(6) == "6 months"
+
+
+def test_extraction_cap_counts_ten_calls_then_blocks():
+    from app import (EXTRACTION_LIMIT, EXTRACTION_LIMIT_MESSAGE,
+                     extraction_blocked, extractions_used, record_extraction)
+
+    assert EXTRACTION_LIMIT == 10
+    assert EXTRACTION_LIMIT_MESSAGE == (
+        "Demo limit reached for this session; you can still enter "
+        "numbers by hand on the next page"
+    )
+    state: dict = {}
+    assert extractions_used(state) == 0
+    assert not extraction_blocked(state)
+    for _ in range(EXTRACTION_LIMIT):
+        record_extraction(state)
+    assert extractions_used(state) == EXTRACTION_LIMIT
+    assert extraction_blocked(state)
+
+
+def test_parse_side_skips_action_once_cap_reached():
+    from app import (EXTRACTION_LIMIT, INPUT_DEFAULTS, LOAN_FIELDS,
+                     _parse_side, record_extraction)
+
+    class _Spinner:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *exc):
+            return False
+
+    class _St:
+        def __init__(self, state):
+            self.session_state = state
+
+        def spinner(self, _msg):
+            return _Spinner()
+
+    state = {"loan_text": "Balance $20,000.", "inputs": dict(INPUT_DEFAULTS)}
+    for _ in range(EXTRACTION_LIMIT):
+        record_extraction(state)
+    calls: list = []
+    _parse_side(_St(state), "loan", "loan", LOAN_FIELDS,
+                lambda text: calls.append(text))
+    assert calls == []

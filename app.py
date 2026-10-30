@@ -67,6 +67,19 @@ def format_money(value: float) -> str:
     return f"${abs(value):,.2f}"
 
 
+def escape_display(text: str) -> str:
+    """Escape for Streamlit markdown: `$...$` renders as LaTeX, so a sentence
+    with two dollar amounts loses its `$` signs. Escape ONLY here, at display:
+    engine strings and format_money stay plain, because verify.py checks the
+    plain text."""
+    return text.replace("$", "\\$")
+
+
+def wait_option_label(months: int) -> str:
+    """One wait-dropdown option: the count reads as months, not a bare number."""
+    return f"{months} months"
+
+
 def format_rate_floor(rate: float) -> str:
     """Display only: scenario rates round DOWN to two decimals (5.1068% as
     5.10%), never overstating the future. The epsilon rescues float dust
@@ -99,10 +112,10 @@ def describe_thresholds_heading(thresholds: Any) -> str:
     )
 
 
-def today_column_label(baseline: str, baseline_total: float) -> str:
+def today_column_label(baseline: str) -> str:
     """The try-a-rate table's today column: the named cheaper option, with
-    ties shown as keeping the loan."""
-    return f"Today: {_BASELINE_NAMES[baseline]} ({format_money(baseline_total)})"
+    ties shown as keeping the loan. No total here — it sits one row down."""
+    return f"Today: {_BASELINE_NAMES[baseline]}"
 
 
 def _months_word(months: int) -> str:
@@ -355,6 +368,33 @@ def needs_extract(text: str, extracted_text: str | None, result: Any) -> bool:
     return result is None or text != extracted_text
 
 
+EXTRACTION_LIMIT = 10
+EXTRACTION_LIMIT_MESSAGE = (
+    "Demo limit reached for this session; you can still enter "
+    "numbers by hand on the next page"
+)
+
+
+def extractions_used(state: Any) -> int:
+    """How many extraction calls this session has spent. The count lives in
+    session state, so a rerun or a new deploy starts a fresh budget."""
+    try:
+        return int(state.get("extraction_calls", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def extraction_blocked(state: Any) -> bool:
+    """True once the session's demo budget is spent. Manual entry never
+    checks this — only model calls do."""
+    return extractions_used(state) >= EXTRACTION_LIMIT
+
+
+def record_extraction(state: Any) -> None:
+    """Spend one extraction call: exactly one model invocation, win or fail."""
+    state["extraction_calls"] = extractions_used(state) + 1
+
+
 def _parse_side(st: Any, label: str, prefix: str, names: tuple[str, ...], action: Any) -> None:
     """Run one side's extraction if its text is new, and record the outcome.
     Failures are stored for page 2 — the manual path below still works."""
@@ -362,6 +402,9 @@ def _parse_side(st: Any, label: str, prefix: str, names: tuple[str, ...], action
     text = state[f"{prefix}_text"]
     if not needs_extract(text, state.get(f"extracted_{prefix}_text"), state.get(f"{prefix}_result")):
         return
+    if extraction_blocked(state):
+        return  # budget spent: boxes keep what the user typed, no API call
+    record_extraction(state)
     try:
         with st.spinner(f"Reading {label} terms…"):
             result = action(text)
@@ -436,6 +479,8 @@ def _page_input(st: Any) -> None:
                "for now, paste their text above or upload a `.txt` file.")
     st.caption("Continuing parses both statements automatically — "
                "you review, edit, and confirm everything on the next page.")
+    if extraction_blocked(st.session_state):
+        st.write(EXTRACTION_LIMIT_MESSAGE)
     _, center, _ = st.columns([2, 1, 2])
     with center:
         if st.button("Continue", type="primary", key="to_page2",
@@ -689,18 +734,20 @@ def _page_results(st: Any) -> None:
     except ValueError as exc:
         st.error(f"Could not compare: {exc}")
         return
-    st.subheader(decision.headline)
-    st.write(decision.tradeoff_note)
+    st.subheader(escape_display(decision.headline))
+    st.write(escape_display(decision.tradeoff_note))
     st.table(
         {
             "Option": ["Keep", "Refinance now"],
-            "Monthly": [format_money(result.keep_monthly), format_money(result.refi_monthly)],
-            "Total": [format_money(result.keep_total), format_money(result.refi_total)],
+            "Monthly": [escape_display(format_money(result.keep_monthly)),
+                        escape_display(format_money(result.refi_monthly))],
+            "Total": [escape_display(format_money(result.keep_total)),
+                      escape_display(format_money(result.refi_total))],
         }
     )
-    st.write(f"Cash due today: {format_money(result.cash_due_today)}.")
+    st.write(escape_display(f"Cash due today: {format_money(result.cash_due_today)}."))
     for row in split_rows(result):
-        st.write(f"- {row}")
+        st.write(escape_display(f"- {row}"))
     if result.breakeven_month is None:
         st.write("Breakeven: refinancing never stays ahead within the horizon.")
     else:
@@ -728,18 +775,21 @@ def _page_results(st: Any) -> None:
             st.error(f"Could not price waiting: {exc}")
             compared = None
         else:
-            st.write(describe_thresholds_heading(thresholds))
-            st.write(f"Today's offer: {format_rate_floor(thresholds.offer_rate)}.")
+            st.write(escape_display(describe_thresholds_heading(thresholds)))
+            st.write(escape_display(
+                f"Today's offer: {format_rate_floor(thresholds.offer_rate)}."))
             st.table({
                 "Wait": [f"{months} months" for months, _ in thresholds.rates],
-                "Rate needed": [format_threshold_rate(rate) for _, rate in thresholds.rates],
+                "Rate needed": [escape_display(format_threshold_rate(rate))
+                                for _, rate in thresholds.rates],
             })
             st.write("Try a rate:")
             if inputs["wait_months"] not in options:
                 inputs["wait_months"] = options[0]
             if state.get("wait_months") not in options:
                 state["wait_months"] = inputs["wait_months"]
-            wait_months = st.selectbox("Wait how long?", options, key="wait_months")
+            wait_months = st.selectbox("Wait how long?", options, key="wait_months",
+                                             format_func=wait_option_label)
             inputs["wait_months"] = int(wait_months)
             if inputs["wait_rate_pct"] is None:
                 inputs["wait_rate_pct"] = inputs["offer_rate_pct"]
@@ -766,9 +816,7 @@ def _page_results(st: Any) -> None:
                 else:
                     today_monthly = result.keep_monthly
                     today_months = result.months_to_payoff_keep
-                today_label = today_column_label(
-                    compared.baseline, compared.baseline_total
-                )
+                today_label = escape_display(today_column_label(compared.baseline))
                 wait_label = (
                     f"Wait {compared.plan.wait_months} months, then refinance "
                     f"at {format_rate_floor(compared.plan.annual_rate)}"
@@ -776,19 +824,20 @@ def _page_results(st: Any) -> None:
                 st.table({
                     "": ["Monthly payments", "Total paid", "Paid off in"],
                     today_label: [
-                        f"{format_money(today_monthly)}/mo",
-                        format_money(compared.baseline_total),
+                        escape_display(f"{format_money(today_monthly)}/mo"),
+                        escape_display(format_money(compared.baseline_total)),
                         f"{today_months} months",
                     ],
-                    wait_label: [
-                        f"{format_money(result.keep_monthly)}/mo for "
-                        f"{compared.plan.wait_months} months, then "
-                        f"{format_money(compared.plan.monthly)}/mo",
-                        format_money(compared.plan.total),
+                    escape_display(wait_label): [
+                        escape_display(
+                            f"{format_money(result.keep_monthly)}/mo for "
+                            f"{compared.plan.wait_months} months, then "
+                            f"{format_money(compared.plan.monthly)}/mo"),
+                        escape_display(format_money(compared.plan.total)),
                         f"{compared.plan.months_to_payoff} months",
                     ],
                 })
-                st.write(describe_wait_result(compared))
+                st.write(escape_display(describe_wait_result(compared)))
     st.caption(
         "Code-written verdict from fixed rules — the model narrative "
         "arrives in a later slice. " + DISCLAIMER
