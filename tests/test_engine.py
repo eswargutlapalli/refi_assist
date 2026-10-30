@@ -16,6 +16,7 @@ from engine import (
     _stay_green_month,
     cashflows,
     compare,
+    compare_wait,
     monthly_payment,
     remaining_balance,
     schedule,
@@ -469,6 +470,61 @@ def test_wait_six_month_threshold_for_15k_trap():
     assert wait_plan(current, offer, 6, answer.rate).total == pytest.approx(answer.baseline_total, abs=0.01)
     assert wait_plan(current, offer, 6, answer.rate - 0.005).total < answer.baseline_total
     assert wait_plan(current, offer, 6, answer.rate + 0.005).total > answer.baseline_total
+
+
+def test_compare_wait_bundles_plan_baseline_and_difference():
+    # One call prices the scenario against today's cheaper total: the plan,
+    # the engine's own baseline naming, and the signed difference.
+    current = CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40)
+    offer = RefinanceOffer(annual_rate=0.06, term_months=60)
+    compared = compare_wait(current, offer, 6, 0.05)
+    assert compared.plan.total == wait_plan(current, offer, 6, 0.05).total
+    threshold = wait_breakeven_rate(current, offer, 6)
+    assert (compared.baseline, compared.baseline_total, compared.breakeven_rate) == (
+        threshold.baseline, threshold.baseline_total, threshold.rate)
+    assert compared.savings_vs_baseline == compared.baseline_total - compared.plan.total
+    today = compare(current, offer)
+    assert compared.baseline_total == min(today.keep_total, today.refi_total)
+
+
+def test_wait_plan_reports_payoff_months():
+    current = CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40)
+    offer = RefinanceOffer(annual_rate=0.06, term_months=60)
+    assert wait_plan(current, offer, 6, 0.05).months_to_payoff == 66
+
+
+def test_compare_wait_reports_months_vs_baseline():
+    current = CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40)
+    wait_later = compare_wait(current, RefinanceOffer(annual_rate=0.06, term_months=60), 6, 0.05)
+    assert wait_later.months_vs_baseline == 66 - 60
+    pricey = RefinanceOffer(annual_rate=0.06, term_months=24, fees=2000.0)
+    wait_earlier = compare_wait(current, pricey, 3, 0.03)
+    assert wait_earlier.baseline == "keep"
+    assert wait_earlier.months_vs_baseline == 27 - 40
+    same = RefinanceOffer(annual_rate=0.06, term_months=48)
+    tied = compare_wait(
+        CurrentLoan(balance=20000.0, annual_rate=0.06, remaining_months=48),
+        same, 6, 0.05)
+    assert tied.baseline == "equal"
+    assert tied.months_vs_baseline == 54 - 48  # ties fall back to keep's payoff
+
+
+def test_wait_thresholds_names_baseline_and_rates():
+    from engine import wait_thresholds
+
+    current = CurrentLoan(balance=20000.0, annual_rate=0.09, remaining_months=40)
+    offer = RefinanceOffer(annual_rate=0.06, term_months=60)
+    thresholds = wait_thresholds(current, offer, [3, 6, 9, 12])
+    assert thresholds.baseline == "refinance_now"
+    assert thresholds.baseline_total == compare(current, offer).refi_total
+    assert thresholds.offer_rate == 0.06
+    assert [w for w, _ in thresholds.rates] == [3, 6, 9, 12]
+    for months, rate in thresholds.rates:
+        assert rate == wait_breakeven_rate(current, offer, months).rate
+    with pytest.raises(ValueError):
+        wait_thresholds(current, offer, [])
+    with pytest.raises(ValueError):
+        wait_thresholds(current, offer, [3, 99])
 
 
 def test_wait_three_month_threshold_against_refinance_now():

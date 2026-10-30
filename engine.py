@@ -338,6 +338,8 @@ class WaitPlan:
     monthly: float  # new payment after refinancing
     total: float  # paid_while_waiting + new-loan payments + upfront charges
     # (fees unless financed, plus any prepayment penalty)
+    months_to_payoff: int  # wait plus the new loan's full term: waiting
+    # extends payoff whenever the new term alone would not beat today
 
 
 def _validate_wait(wait_months: int, remaining_months: int) -> None:
@@ -377,6 +379,7 @@ def wait_plan(
         balance_at_refi=balance_at_refi,
         monthly=new_monthly,
         total=paid_while_waiting + new_monthly * offer.term_months + upfront_costs,
+        months_to_payoff=wait_months + offer.term_months,
     )
 
 
@@ -434,6 +437,79 @@ def wait_breakeven_rate(
         else:
             hi = mid
     return WaitBreakeven(baseline, baseline_total, (lo + hi) / 2)
+
+
+@dataclass(frozen=True)
+class WaitComparison:
+    """One wait scenario against today's cheaper option, fully priced: the
+    plan, the engine's own baseline naming, and the signed difference.
+    Sign follows decision 6 (positive means saving): savings_vs_baseline is
+    baseline_total - plan.total, so positive means waiting saves."""
+
+    plan: WaitPlan
+    baseline: str  # "keep", "refinance_now", or "equal"
+    baseline_total: float
+    savings_vs_baseline: float
+    breakeven_rate: float | None  # future rate tying the baseline; None when
+    # even 0% cannot win
+    months_vs_baseline: int  # plan payoff minus the baseline's payoff;
+    # positive means finishing later. Exact ties fall back to keep's payoff,
+    # the status quo.
+
+
+def compare_wait(
+    current: CurrentLoan, offer: RefinanceOffer, wait_months: int, annual_rate: float
+) -> WaitComparison:
+    """Price waiting `wait_months` then refinancing at scenario `annual_rate`,
+    against today's cheaper total. Scenario analysis only — never a forecast."""
+    plan = wait_plan(current, offer, wait_months, annual_rate)
+    threshold = wait_breakeven_rate(current, offer, wait_months)
+    today = compare(current, offer)
+    if threshold.baseline == "refinance_now":
+        baseline_months = today.months_to_payoff_refi
+    else:
+        baseline_months = today.months_to_payoff_keep
+    return WaitComparison(
+        plan=plan,
+        baseline=threshold.baseline,
+        baseline_total=threshold.baseline_total,
+        savings_vs_baseline=threshold.baseline_total - plan.total,
+        breakeven_rate=threshold.rate,
+        months_vs_baseline=plan.months_to_payoff - baseline_months,
+    )
+
+
+@dataclass(frozen=True)
+class WaitThresholds:
+    """One named baseline plus a threshold rate per wait: the futures in
+    which waiting wins, against today's cheaper option at today's offer."""
+
+    baseline: str  # "keep", "refinance_now", or "equal"
+    baseline_total: float
+    offer_rate: float  # today's offer APR, for the heading
+    rates: tuple[tuple[int, float | None], ...]  # (wait_months, future rate
+    # tying the baseline; None when even 0% cannot win)
+
+
+def wait_thresholds(
+    current: CurrentLoan, offer: RefinanceOffer, waits: list[int] | tuple[int, ...]
+) -> WaitThresholds:
+    """Threshold future rate for each wait in `waits`, all against today's
+    cheaper total. Needs at least one wait; each must be shorter than the
+    remaining term, like wait_plan itself."""
+    ordered = list(waits)
+    if not ordered:
+        raise ValueError("wait_thresholds needs at least one wait")
+    first = wait_breakeven_rate(current, offer, ordered[0])
+    rows = [(ordered[0], first.rate)]
+    for months in ordered[1:]:
+        rows.append((months, wait_breakeven_rate(current, offer, months).rate))
+    return WaitThresholds(
+        baseline=first.baseline,
+        baseline_total=first.baseline_total,
+        offer_rate=offer.annual_rate,
+        rates=tuple(rows),
+    )
 
 
 # ============================================================================
