@@ -829,11 +829,13 @@ def _page_results(st: Any) -> None:
     except Exception as exc:  # verdict stands; only the narrative is lost
         st.error(f"Explanation failed: {exc}")
     else:
-        st.write(escape_display(explained.text))
-        st.caption(escape_display(explained.status))
+        box = st.container(border=True)
+        box.write("**In plain words**")
+        box.write(escape_display(explained.text))
+        box.caption(escape_display(explained.status))
         notice = limit_notice(explained)
         if notice is not None:
-            st.write(escape_display(notice))
+            box.write(escape_display(notice))
 
     st.subheader("What if you wait?")
     st.write(
