@@ -12,9 +12,12 @@ takes %/percent or an apr-word, months take month/mo/mos/payments, dollars
 refuse %/month/year), and the nearest field word within three tokens must be
 the claimed field, with earlier words winning ties and $/dollars defaulting
 to balance. Zero grounds only with no digits stated, a zero word (no, none,
-without, waived, not charged), and a field word. An ungrounded field gets one
-retry with kind-only feedback, then its value is cleared (None) for the user
-to type — the confirm gate in app.py will show exactly which fields those are.
+without, waived, not charged), and a field word. Null value plus null quote
+means the model pled absence: status "not_stated", no retry, value None —
+the common unstated-penalty case costs one call, not two. An ungrounded
+(stated-but-unproven) field gets one retry with kind-only feedback, then its
+value is cleared (None) for the user to type — the confirm gate in app.py
+will show exactly which fields those are.
 
 Number normalization is code's job, not the model's: the model reports 7.5
 for "APR 7.5%" and 20000.0 for "$20,000"; the converters divide percents by
@@ -367,12 +370,12 @@ _NEG_TOKENS = {"not", "never"}
 
 @dataclass
 class FieldOutcome:
-    """One field after checking: grounded, or cleared (value None) for the user."""
+    """One field after checking: grounded, not_stated, or cleared (value None)."""
 
     name: str
     value: float | bool | None
     quote: str | None
-    status: str  # "grounded", "ungrounded", or "cleared"
+    status: str  # "grounded", "not_stated", "ungrounded", or "cleared"
 
 
 @dataclass
@@ -381,15 +384,15 @@ class ExtractionResult:
     attempts: int
 
     def _require_grounded(self, names: tuple[str, ...]) -> None:
-        """Cleared fields raise naming themselves: the user must type them at
-        the confirm gate, never silently defaulted."""
+        """Cleared or unstated fields raise naming themselves: the user must
+        type them at the confirm gate, never silently defaulted."""
         missing = sorted(
             name for name in names
             if self.fields[name].status != "grounded"
             or self.fields[name].value is None
         )
         if missing:
-            raise ValueError(f"Cleared for the user to enter: {missing}")
+            raise ValueError(f"Needs the user to enter: {missing}")
 
     def to_current_loan(self) -> CurrentLoan:
         """Build engine terms for the existing loan (percent → decimal here)."""
@@ -648,6 +651,10 @@ def _ground_all(terms: CurrentLoanTerms, source: str) -> dict[str, FieldOutcome]
     outcomes = {}
     for name in _FIELD_NAMES:
         cell = getattr(terms, name)
+        if cell.value is None and cell.quote is None:
+            outcomes[name] = FieldOutcome(
+                name=name, value=None, quote=None, status="not_stated")
+            continue
         ok = check_field(
             cell.value, cell.quote, source,
             field=name, whole=(name == "remaining_months"),
@@ -663,6 +670,10 @@ def _ground_offer(terms: RefinanceOfferTerms, source: str) -> dict[str, FieldOut
     outcomes = {}
     for name in ("annual_rate_pct", "term_months", "fees"):
         cell = getattr(terms, name)
+        if cell.value is None and cell.quote is None:
+            outcomes[name] = FieldOutcome(
+                name=name, value=None, quote=None, status="not_stated")
+            continue
         ok = check_field(
             cell.value, cell.quote, source,
             field=name, whole=(name == "term_months"),
@@ -672,6 +683,10 @@ def _ground_offer(terms: RefinanceOfferTerms, source: str) -> dict[str, FieldOut
             status="grounded" if ok else "ungrounded",
         )
     flag = terms.fees_financed
+    if flag.financed is None and flag.quote is None:
+        outcomes["fees_financed"] = FieldOutcome(
+            name="fees_financed", value=None, quote=None, status="not_stated")
+        return outcomes
     ok = check_flag(flag.financed, flag.quote, source)
     outcomes["fees_financed"] = FieldOutcome(
         name="fees_financed", value=flag.financed, quote=flag.quote,
@@ -687,15 +702,17 @@ def _extract_with_retry(
     ground: Any,
     client: Any,
 ) -> ExtractionResult:
-    """Shared one-retry loop: ground, re-ask the failures once with kind-only
-    feedback, then clear what still fails. Round-one grounded fields stand."""
+    """Shared one-retry loop: ground, re-ask the stated-but-ungrounded fields
+    once with kind-only feedback, then clear what still fails. Round-one
+    grounded fields stand; not_stated fields (null/null) are never re-asked."""
     terms, _ = complete_schema(
         working, schema, client=client, prompt_cache_key=EXTRACT_PROMPT_CACHE_KEY
     )
     outcomes = ground(terms, source_text)
     attempts = 1
     bad = sorted(
-        name for name, outcome in outcomes.items() if outcome.status != "grounded"
+        name for name, outcome in outcomes.items()
+        if outcome.status not in ("grounded", "not_stated")
     )
     if bad:
         attempts = 2
@@ -706,7 +723,7 @@ def _extract_with_retry(
         )
         fresh = ground(retry_terms, source_text)
         for name in bad:
-            if fresh[name].status == "grounded":
+            if fresh[name].status in ("grounded", "not_stated"):
                 outcomes[name] = fresh[name]
             else:
                 outcomes[name] = FieldOutcome(

@@ -596,6 +596,77 @@ def test_check_flag_signals():
     assert check_flag(False, both, both) is False
 
 
+def test_null_null_penalty_needs_no_retry():
+    # The common case: the statement never mentions a penalty, the model
+    # reports null/null, and no retry is spent proving the absence.
+    source = "Statement: current balance $20,000. APR 7.5%. 36 payments remaining."
+    reply = _terms(
+        20000.0, "current balance $20,000",
+        7.5, "APR 7.5%",
+        36.0, "36 payments remaining",
+        None, None,
+    )
+    fake = _FakeClient([reply])
+    result = extract_current_loan(source, client=fake)
+    assert result.attempts == 1
+    assert len(fake.calls) == 1
+    penalty = result.fields["prepayment_penalty"]
+    assert penalty.status == "not_stated"
+    assert penalty.value is None
+
+
+def test_not_stated_fields_skip_the_retry():
+    # Only stated-but-ungrounded fields are re-asked; the null/null penalty
+    # rides through untouched while the bad balance quote gets its retry.
+    source = "Statement: current balance $20,000. APR 7.5%. 36 payments remaining."
+    first = _terms(
+        20000.0, "balance $99,999",
+        7.5, "APR 7.5%",
+        36.0, "36 payments remaining",
+        None, None,
+    )
+    second = _terms(
+        20000.0, "current balance $20,000",
+        7.5, "APR 7.5%",
+        36.0, "36 payments remaining",
+        None, None,
+    )
+    fake = _FakeClient([first, second])
+    result = extract_current_loan(source, client=fake)
+    assert result.attempts == 2
+    assert len(fake.calls) == 2
+    assert result.fields["balance"].status == "grounded"
+    assert result.fields["prepayment_penalty"].status == "not_stated"
+
+
+def test_offer_null_flag_needs_no_retry():
+    source = "Refinance offer: APR 5.9%. Term 60 months. Origination fee $300."
+    terms = _offer(
+        5.9, "APR 5.9%",
+        60.0, "Term 60 months",
+        300.0, "Origination fee $300",
+        None, None,
+    )
+    fake = _FakeClient([terms])
+    result = extract_refinance_offer(source, client=fake)
+    assert result.attempts == 1
+    assert result.fields["fees_financed"].status == "not_stated"
+
+
+def test_not_stated_still_needs_the_user():
+    source = "Statement: current balance $20,000. APR 7.5%. 36 payments remaining."
+    reply = _terms(
+        20000.0, "current balance $20,000",
+        7.5, "APR 7.5%",
+        36.0, "36 payments remaining",
+        None, None,
+    )
+    fake = _FakeClient([reply])
+    result = extract_current_loan(source, client=fake)
+    with pytest.raises(ValueError, match="prepayment_penalty"):
+        result.to_current_loan()
+
+
 def test_extraction_uses_its_own_cache_key():
     # Stable per-slice keys are what make prompt-cache hits real credit
     # savings: every extraction call, initial and retry, carries this slice's

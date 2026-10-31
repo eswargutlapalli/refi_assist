@@ -213,6 +213,16 @@ def test_field_caption_covers_all_three_states():
     assert field_caption("loan", "prepayment_penalty", None, True) == (
         "not in your statement — leave blank for none"
     )
+    unstated = ExtractionResult(fields={
+        "prepayment_penalty": FieldOutcome(
+            "prepayment_penalty", None, None, "not_stated"),
+    }, attempts=1)
+    assert field_caption("loan", "prepayment_penalty", unstated, True) == (
+        "not found in your statement — check it, then leave blank for none"
+    )
+    assert field_caption("loan", "balance", ExtractionResult(fields={
+        "balance": FieldOutcome("balance", None, None, "not_stated"),
+    }, attempts=1)) == "not found in your statement, please enter"
 
 
 def test_missing_required_rejects_nonpositive_structurals():

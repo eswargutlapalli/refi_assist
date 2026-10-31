@@ -508,6 +508,11 @@ def field_caption(prefix: str, name: str, result: Any,
     outcome = result.fields.get(name)
     if outcome is not None and outcome.status == "grounded" and outcome.quote:
         return f"from: {outcome.quote}"
+    if outcome is not None and outcome.status == "not_stated":
+        return (
+            "not found in your statement — check it, then leave blank for none"
+            if blank_means_none else "not found in your statement, please enter"
+        )
     if blank_means_none and not stated_but_ungrounded(prefix, name, result):
         return "couldn't verify — leave blank for none"
     return "couldn't verify, please enter"
