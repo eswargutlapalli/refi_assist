@@ -594,3 +594,16 @@ def test_check_flag_signals():
     both = "Fees rolled into the loan and $300 due at signing."
     assert check_flag(True, both, both) is False
     assert check_flag(False, both, both) is False
+
+
+def test_extraction_uses_its_own_cache_key():
+    # Stable per-slice keys are what make prompt-cache hits real credit
+    # savings: every extraction call, initial and retry, carries this slice's
+    # key rather than the shared default.
+    fake = _FakeClient([GOOD_TERMS])
+    extract_current_loan(SOURCE, client=fake)
+    assert fake.calls
+    for call in fake.calls:
+        assert call["extra_body"] == {
+            "prompt_cache_key": extract.EXTRACT_PROMPT_CACHE_KEY
+        }
