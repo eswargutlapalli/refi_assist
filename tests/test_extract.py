@@ -21,6 +21,7 @@ from extract import (
     check_flag,
     extract_current_loan,
     extract_refinance_offer,
+    word_number_spans,
 )
 
 SOURCE = (
@@ -665,6 +666,15 @@ def test_not_stated_still_needs_the_user():
     result = extract_current_loan(source, client=fake)
     with pytest.raises(ValueError, match="prepayment_penalty"):
         result.to_current_loan()
+
+
+def test_word_number_spans_reports_spans_and_values():
+    # verify.py classifies spelled-out runs by position: same parser as
+    # _word_amounts, plus the character spans the narrative check needs.
+    source = "Balance five thousand dollars over six months."
+    found = [(source[s:e], v) for s, e, v in word_number_spans(source)]
+    assert ("five thousand dollars", 5000.0) in found
+    assert ("six", 6.0) in found
 
 
 def test_extraction_uses_its_own_cache_key():

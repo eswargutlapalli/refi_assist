@@ -30,6 +30,7 @@ from engine import (
     wait_thresholds,
 )
 from extract import ExtractionResult, FieldOutcome, extract_current_loan, extract_refinance_offer
+from verify import split_rows  # one source for the split wording (decision 12)
 
 DISCLAIMER = (
     "Educational estimate only — not a loan offer, application, or "
@@ -279,26 +280,7 @@ def missing_required(inputs: dict[str, Any], must_enter: frozenset = frozenset()
     return missing
 
 
-def split_rows(result: Any) -> list[str]:
-    """Rate/term/costs split in directional words (decision 12). The engine
-    keeps signed numbers; wording here is display only."""
-    if result.rate_effect > 0:
-        rate = f"Lower rate: saves {format_money(result.rate_effect)}."
-    elif result.rate_effect < 0:
-        rate = f"Higher rate: costs {format_money(result.rate_effect)}."
-    else:
-        rate = "Same rate: no difference."
-    if result.months_to_payoff_refi > result.months_to_payoff_keep:
-        term = f"Longer term: costs {format_money(result.term_effect)}."
-    elif result.months_to_payoff_refi < result.months_to_payoff_keep:
-        term = f"Shorter term: saves {format_money(result.term_effect)}."
-    else:
-        term = "Same term: no change."
-    if result.costs_effect == 0:
-        costs = "No fees or charges."
-    else:
-        costs = f"Fees and charges: cost {format_money(result.costs_effect)}."
-    return [rate, term, costs]
+
 
 
 _LOAN_INPUTS = {

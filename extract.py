@@ -118,25 +118,59 @@ def _tokenize(text: str) -> list[tuple[str, int, int]]:
     return [(m.group(0), m.start(), m.end()) for m in _TOKEN_RE.finditer(lowered)]
 
 
-def _normalize_plurals(tokens: list[str]) -> list[str]:
+def _normalize_with_owners(tokens: list[str]) -> tuple[list[str], list[tuple[int, int]]]:
     # Plural scales behave as singular ("two hundreds thirty" → 230).
     # "three tens" is a pair: the number word becomes its -ty form (30).
     # "four ones" drops the ones: four units is 4.
+    # Owners map each output token back to its input span, so merging ("three
+    # tens" → "thirty") still covers both words for span reporting.
     out: list[str] = []
-    for token in tokens:
+    owners: list[tuple[int, int]] = []
+    for i, token in enumerate(tokens):
         if token in _PLURAL_SCALES:
             out.append(_PLURAL_SCALES[token])
+            owners.append((i, i))
         elif token == "tens":
             if out and out[-1] in _TENS_PAIR:
                 out[-1] = _TENS_PAIR[out[-1]]
+                first, _ = owners[-1]
+                owners[-1] = (first, i)
             else:
                 out.append("ten")
+                owners.append((i, i))
         elif token == "ones":
             if out and out[-1] in _WORD_VALUES:
                 continue
             out.append("one")
+            owners.append((i, i))
         else:
             out.append(token)
+            owners.append((i, i))
+    return out, owners
+
+
+def _normalize_plurals(tokens: list[str]) -> list[str]:
+    return _normalize_with_owners(tokens)[0]
+
+
+def word_number_spans(text: str) -> list[tuple[int, int, float]]:
+    """(char start, char end, value) of each spelled-out amount run in text.
+
+    Public for verify.py: narratives render figures as digits, so every
+    spelled-out run is found here and classified there. Same tokenizer,
+    plurals, and-splitting, and values as _word_amounts — only spans added.
+    """
+    toks = _tokenize(text or "")
+    strs = [tok for tok, _, _ in toks]
+    norm, owners = _normalize_with_owners(strs)
+    out = []
+    for start, end in _split_runs(norm):
+        value = _run_value(norm[start:end])
+        if value is None:
+            continue
+        first, _ = owners[start]
+        _, last = owners[end - 1]
+        out.append((toks[first][1], toks[last][2], value))
     return out
 
 
