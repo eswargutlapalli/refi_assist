@@ -5,6 +5,8 @@ computes; compute needs every confirmed field present; percent-to-decimal
 conversion lives in code; display carries words, never signs.
 """
 
+import types
+
 import pytest
 
 from engine import compare
@@ -530,6 +532,167 @@ def test_wait_option_label_names_months():
     from app import wait_option_label
 
     assert wait_option_label(6) == "6 months"
+
+
+def _explain_fixture():
+    from engine import compare, verdict
+    result = compare(build_current_loan(20000.0, 9.0, 40, 0.0),
+                     build_offer(5.0, 60, 0.0, False))
+    return result, verdict(result, "lowest_total_cost")
+
+
+class _ExplainFakeClient:
+    def __init__(self, script):
+        self.script = list(script)
+        self.calls = 0
+        self.chat = types.SimpleNamespace(completions=self)
+
+    def create(self, **kwargs):
+        self.calls += 1
+        message = types.SimpleNamespace(content=self.script.pop(0),
+                                        tool_calls=None)
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=message)],
+            usage=None, model="muse-spark-1.3")
+
+
+def test_explanation_key_tracks_confirmed_inputs():
+    from app import INPUT_DEFAULTS, explanation_key
+    first = explanation_key(dict(INPUT_DEFAULTS))
+    changed = dict(INPUT_DEFAULTS)
+    changed["loan_balance"] = 1.0
+    assert explanation_key(changed) != first
+    assert explanation_key(dict(INPUT_DEFAULTS)) == first
+
+
+def test_get_explanation_caches_per_inputs():
+    from app import INPUT_DEFAULTS, explanation_key, get_explanation
+    result, decision = _explain_fixture()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    state = {"inputs": dict(INPUT_DEFAULTS)}
+    fake = _ExplainFakeClient([draft, draft])
+    first = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert first.kind == "verified"
+    second = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert second is first
+    assert fake.calls == 1
+    state["inputs"] = dict(INPUT_DEFAULTS, loan_balance=1.0)
+    assert explanation_key(state["inputs"]) != explanation_key(INPUT_DEFAULTS)
+    get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert fake.calls == 2
+
+
+def test_narrative_renders_escaped_but_stores_plain():
+    from app import INPUT_DEFAULTS, escape_display, get_explanation
+    result, decision = _explain_fixture()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    assert draft.count("$") >= 2
+    state = {"inputs": dict(INPUT_DEFAULTS)}
+    stored = get_explanation(state, result, decision, (9.0, 5.0),
+                             client=_ExplainFakeClient([draft]))
+    assert stored.text == draft
+    shown = escape_display(stored.text)
+    assert shown == draft.replace("$", "\\$")
+    assert "\\$" in shown
+
+
+def test_budget_survives_start_over():
+    # The narrator cap is per session like the extraction cap: Start over
+    # clears the cached text but never refills the budget.
+    from app import INPUT_DEFAULTS, get_explanation, reset_all
+    result, decision = _explain_fixture()
+    state = {
+        "inputs": dict(INPUT_DEFAULTS),
+        "loan_text": "words",
+        "explanation_calls": 5,
+        "explanation": {"key": "old", "result": None},
+    }
+    reset_all(state)
+    fake = _ExplainFakeClient([])
+    out = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert (out.kind, out.reason) == ("template", "limit_reached")
+    assert decision.headline in out.text
+    assert fake.calls == 0
+
+
+def test_limit_shows_unavailable_status_plus_message():
+    from explainer import STATUS_UNAVAILABLE
+    from app import (
+        EXPLANATION_LIMIT,
+        EXPLANATION_LIMIT_MESSAGE,
+        INPUT_DEFAULTS,
+        get_explanation,
+        limit_notice,
+        record_explanation,
+    )
+    assert EXPLANATION_LIMIT == 5
+    result, decision = _explain_fixture()
+    state = {"inputs": dict(INPUT_DEFAULTS)}
+    for _ in range(EXPLANATION_LIMIT):
+        record_explanation(state)
+    fake = _ExplainFakeClient([])
+    out = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert out.status == STATUS_UNAVAILABLE
+    assert limit_notice(out) == EXPLANATION_LIMIT_MESSAGE
+    assert decision.headline in out.text
+    assert fake.calls == 0
+
+
+def test_unavailable_result_not_cached():
+    # A failed model call counts against the budget but leaves nothing
+    # cached, so the next render retries instead of replaying the outage.
+    from llm import LlmError
+    from app import INPUT_DEFAULTS, get_explanation
+    result, decision = _explain_fixture()
+    good = f"{decision.headline} {decision.tradeoff_note}"
+
+    class _FailOnce:
+        def __init__(self):
+            self.calls = 0
+            self.chat = types.SimpleNamespace(completions=self)
+
+        def create(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise LlmError("boom")
+            message = types.SimpleNamespace(content=good, tool_calls=None)
+            return types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=message)],
+                usage=None, model="muse-spark-1.3")
+
+    fake = _FailOnce()
+    state = {"inputs": dict(INPUT_DEFAULTS)}
+    first = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert (first.kind, first.reason) == ("template", "model_unavailable")
+    assert "explanation" not in state
+    second = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert (second.kind, second.reason) == ("verified", None)
+    third = get_explanation(state, result, decision, (9.0, 5.0), client=fake)
+    assert third is second
+    assert fake.calls == 2
+
+
+def test_priority_changes_explanation_key():
+    from engine import compare, verdict
+    from app import INPUT_DEFAULTS, explanation_key, get_explanation
+    assert explanation_key(
+        dict(INPUT_DEFAULTS, priority="lowest_total_cost")) != explanation_key(
+        dict(INPUT_DEFAULTS, priority="lowest_monthly_payment"))
+    result = compare(build_current_loan(20000.0, 9.0, 40, 0.0),
+                     build_offer(5.0, 60, 0.0, False))
+    first_decision = verdict(result, "lowest_total_cost")
+    second_decision = verdict(result, "lowest_monthly_payment")
+    fake = _ExplainFakeClient([
+        f"{first_decision.headline} {first_decision.tradeoff_note}",
+        f"{second_decision.headline} {second_decision.tradeoff_note}",
+    ])
+    state = {"inputs": dict(INPUT_DEFAULTS, priority="lowest_total_cost")}
+    get_explanation(state, result, first_decision, (9.0, 5.0), client=fake)
+    state["inputs"] = dict(INPUT_DEFAULTS, priority="lowest_monthly_payment")
+    out = get_explanation(state, result, second_decision, (9.0, 5.0),
+                          client=fake)
+    assert fake.calls == 2
+    assert out.kind == "verified"
 
 
 def test_extraction_cap_counts_ten_calls_then_blocks():

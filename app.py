@@ -10,8 +10,8 @@ carries directional words, never signs (decision 12).
 
 Slice scope: confirm gate + compare/verdict results + wait scenarios
 (thresholds table, try-a-rate comparison, tradeoff line) for waits 3/6/9/12
-below the remaining months. The model explainer and number verification
-arrive in later slices.
+below the remaining months. Page 3 shows the checked model explanation
+(draft → verify → rewrite → template) with its on-screen status.
 """
 
 from __future__ import annotations
@@ -29,8 +29,15 @@ from engine import (
     verdict,
     wait_thresholds,
 )
+from explainer import (
+    REASON_LIMIT_REACHED,
+    REASON_MODEL_UNAVAILABLE,
+    STATUS_UNAVAILABLE,
+    ExplainResult,
+    explain_verdict,
+)
 from extract import ExtractionResult, FieldOutcome, extract_current_loan, extract_refinance_offer
-from verify import split_rows  # one source for the split wording (decision 12)
+from verify import build_template, split_rows  # one source for the split wording (decision 12)
 
 DISCLAIMER = (
     "Educational estimate only — not a loan offer, application, or "
@@ -627,7 +634,10 @@ def reset_all(state: Any) -> None:
         "loan_error", "offer_error", "extracted_loan_text",
         "extracted_offer_text", "applied_loan_file", "applied_offer_file",
         "up_loan_file", "up_offer_file", "wait_months", "w_wait_rate_pct",
-        "w_priority",
+        # Kept across reset like the extraction budget: the narrator cap is
+        # per session, so Start over clears the cached text but never refills
+        # the runs. "explanation" goes; "explanation_calls" stays.
+        "w_priority", "explanation",
     ):
         if key in state:
             del state[key]
@@ -689,6 +699,77 @@ def _cap(st: Any, prefix: str, input_key: str, name: str, blank: bool = False) -
         read_error=bool(state.get(f"{prefix}_error")))
 
 
+def explanation_key(inputs: dict[str, Any]) -> tuple:
+    """Cache key for the page-3 narrative: every confirmed input that feeds
+    the comparison, so a rerun reuses the checked text instead of respenting."""
+    return tuple(
+        (key, inputs.get(key))
+        for key in ("loan_balance", "loan_rate_pct", "loan_months",
+                    "loan_penalty", "offer_rate_pct", "offer_term",
+                    "offer_fees", "fees_choice", "priority")
+    )
+
+
+EXPLANATION_LIMIT = 5  # narrator runs per session; cached hits never count
+EXPLANATION_LIMIT_MESSAGE = (
+    "Explanation limit reached for this session; showing the code-written "
+    "summary instead"
+)
+
+
+def explanations_used(state: Any) -> int:
+    """How many narrator runs this session has spent. Cached explanations
+    never touch the budget — only fresh runs do."""
+    try:
+        return int(state.get("explanation_calls", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def explanation_blocked(state: Any) -> bool:
+    """True once the session's narrator budget is spent. The template below
+    costs no model call, so it stays available past the limit."""
+    return explanations_used(state) >= EXPLANATION_LIMIT
+
+
+def record_explanation(state: Any) -> None:
+    """Spend one narrator run: a draft plus at most one rewrite."""
+    state["explanation_calls"] = explanations_used(state) + 1
+
+
+def get_explanation(state: Any, result: Any, decision: Any,
+                    rates_pct: tuple[float, ...], client: Any = None) -> ExplainResult:
+    """The checked narrative for these inputs, cached in session state. A
+    fresh key re-runs the ladder (draft → verify → rewrite → template);
+    anything else returns the stored text without another model call. Past
+    the budget, the template serves with the limit reason and no model call.
+    """
+    key = explanation_key(state["inputs"])
+    cached = state.get("explanation")
+    if cached is not None and cached.get("key") == key:
+        return cached["result"]
+    if explanation_blocked(state):
+        return ExplainResult(build_template(result, decision),
+                             STATUS_UNAVAILABLE, 0,
+                             "template", REASON_LIMIT_REACHED)
+    record_explanation(state)
+    explained = explain_verdict(result, decision, rates_pct, client=client)
+    if explained.reason == REASON_MODEL_UNAVAILABLE:
+        return explained  # outage, not an answer: the run counts, but the
+    # next render retries instead of replaying a failed call's template
+    state["explanation"] = {"key": key, "result": explained}
+    return explained
+
+
+def limit_notice(explained: ExplainResult) -> str | None:
+    """Extra on-screen line when the template stands in for a spent budget.
+    Every other outcome speaks through its status alone — only the limit
+    path names itself beside the sanctioned unavailable wording."""
+    if explained.kind == "template" and explained.reason == REASON_LIMIT_REACHED:
+        return EXPLANATION_LIMIT_MESSAGE
+    return None
+
+
 def _build_terms(inputs: dict[str, Any]) -> tuple[CurrentLoan, RefinanceOffer]:
     """Confirmed inputs to engine terms. Blank penalty, fees, and flag mean
     none — the gate guarantees every other field is present. Bad input
@@ -739,6 +820,20 @@ def _page_results(st: Any) -> None:
         st.write("Breakeven: refinancing never stays ahead within the horizon.")
     else:
         st.write(f"Breakeven: month {result.breakeven_month}.")
+
+    try:
+        with st.spinner("Writing a plain-language explanation…"):
+            explained = get_explanation(
+                state, result, decision,
+                (inputs["loan_rate_pct"], inputs["offer_rate_pct"]))
+    except Exception as exc:  # verdict stands; only the narrative is lost
+        st.error(f"Explanation failed: {exc}")
+    else:
+        st.write(escape_display(explained.text))
+        st.caption(escape_display(explained.status))
+        notice = limit_notice(explained)
+        if notice is not None:
+            st.write(escape_display(notice))
 
     st.subheader("What if you wait?")
     st.write(
@@ -825,10 +920,7 @@ def _page_results(st: Any) -> None:
                     ],
                 })
                 st.write(escape_display(describe_wait_result(compared)))
-    st.caption(
-        "Code-written verdict from fixed rules — the model narrative "
-        "arrives in a later slice. " + DISCLAIMER
-    )
+    st.caption("Verdict from fixed code rules. " + DISCLAIMER)
     # Kept: results often send the user back to fix a number or priority,
     # or all the way back to restate the problem. The spacer column pushes
     # Start over flush to the line end.

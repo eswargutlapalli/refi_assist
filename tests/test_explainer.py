@@ -291,6 +291,10 @@ def test_display_text_comes_from_kind_and_reason():
     assert explainer.display_status("rewritten", None) == explainer.STATUS_REWRITTEN
     assert explainer.display_status("template", "failed_checks") == explainer.STATUS_TEMPLATE
     assert explainer.display_status("template", "model_unavailable") == explainer.STATUS_UNAVAILABLE
+    # Retired fourth status: the limit reason has no wording of its own —
+    # the app pairs STATUS_UNAVAILABLE with its limit message instead.
+    with pytest.raises(ValueError, match="limit_reached"):
+        explainer.display_status("template", "limit_reached")
 
 
 def test_prompt_asks_short_headline_first_shape():

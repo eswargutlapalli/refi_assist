@@ -30,11 +30,15 @@ EXPLAINER_PROMPT_CACHE_KEY = "refi-explainer-v1"  # Own key: stable per slice.
 STATUS_VERIFIED = "Verified model narrative — every number checked."
 STATUS_REWRITTEN = "Rewritten once after a failed check — every number checked."
 STATUS_TEMPLATE = "Code-written template — the model narrative did not pass verification."
+REASON_FAILED_CHECKS = "failed_checks"
+REASON_MODEL_UNAVAILABLE = "model_unavailable"
+REASON_LIMIT_REACHED = "limit_reached"
 # Model call itself failed (not a bad draft): same template category as
 # STATUS_TEMPLATE for eval counts — both start with "Code-written" — but
 # honest about the cause. NOTE: AGENTS.md rule 3.4 lists exactly three
 # on-screen states; carrying this fourth needs a rule update there.
 STATUS_UNAVAILABLE = "Code-written summary — the model explanation wasn't available."
+# The limit path reuses STATUS_UNAVAILABLE with the app's limit message.
 
 
 @dataclass
@@ -42,7 +46,7 @@ class ExplainResult:
     """One explained verdict: the text to show plus which of the three it is.
 
     kind drives eval counts ("verified" | "rewritten" | "template"); reason
-    says why a template was used ("failed_checks" | "model_unavailable",
+    says why a template was used (one of the REASON_* values,
     None otherwise). status is the display text chosen from kind + reason.
     """
 
@@ -50,7 +54,7 @@ class ExplainResult:
     status: str  # display text from display_status(kind, reason)
     attempts: int  # model drafts spent: 1, or 2 when a rewrite ran
     kind: str = "verified"  # "verified" | "rewritten" | "template"
-    reason: str | None = None  # template only: "failed_checks" | "model_unavailable"
+    reason: str | None = None  # template only, one of the *_REASON values below
 
 
 def display_status(kind: str, reason: str | None) -> str:
@@ -60,9 +64,9 @@ def display_status(kind: str, reason: str | None) -> str:
         return STATUS_VERIFIED
     if kind == "rewritten":
         return STATUS_REWRITTEN
-    if kind == "template" and reason == "failed_checks":
+    if kind == "template" and reason == REASON_FAILED_CHECKS:
         return STATUS_TEMPLATE
-    if kind == "template" and reason == "model_unavailable":
+    if kind == "template" and reason == REASON_MODEL_UNAVAILABLE:
         return STATUS_UNAVAILABLE
     raise ValueError(f"unknown explainer kind/reason: {kind!r}/{reason!r}")
 
@@ -164,7 +168,7 @@ def explain_verdict(
     except LlmError:
         # No draft at all: fail loudly as the template, honestly labeled.
         return done(build_template(result, decision), "template", 0,
-                    "model_unavailable")
+                    REASON_MODEL_UNAVAILABLE)
     report = verify_narrative(draft, result, decision, rates_pct, wait)
     if report.ok:
         return done(draft, "verified", 1)
@@ -178,8 +182,8 @@ def explain_verdict(
         second = draft_narrative(retry, client=client)
     except LlmError:
         return done(build_template(result, decision), "template", 1,
-                    "model_unavailable")
+                    REASON_MODEL_UNAVAILABLE)
     if verify_narrative(second, result, decision, rates_pct, wait).ok:
         return done(second, "rewritten", 2)
     return done(build_template(result, decision), "template", 2,
-                "failed_checks")
+                REASON_FAILED_CHECKS)
