@@ -53,6 +53,36 @@ def test_build_offer_passes_financed_flag():
     assert offer.fees_financed is True
 
 
+def test_build_current_loan_rejects_fractional_months():
+    # 36.9 must fail loudly, never truncate to 36: the comparison would
+    # run on a term the user did not type.
+    with pytest.raises(ValueError, match="whole number"):
+        build_current_loan(20000.0, 7.5, 36.9, 0.0)
+    assert build_current_loan(20000.0, 7.5, 36.0, 0.0).remaining_months == 36
+
+
+def test_build_offer_rejects_fractional_term():
+    with pytest.raises(ValueError, match="whole number"):
+        build_offer(6.5, 48.5, 250.0, True)
+    assert build_offer(6.5, 48.0, 250.0, True).term_months == 48
+
+
+def test_missing_required_blocks_fractional_months():
+    from app import INPUT_DEFAULTS
+
+    base = dict(INPUT_DEFAULTS)
+    base.update({
+        "loan_balance": 20000.0, "loan_rate_pct": 7.5, "loan_months": 36.9,
+        "loan_penalty": 0.0, "offer_rate_pct": 6.5, "offer_term": 48,
+        "offer_fees": 0.0, "fees_choice": None,
+    })
+    assert missing_required(base) == ["loan.remaining_months"]
+    assert missing_required(dict(base, loan_months=36.0, offer_term=48.5)) == [
+        "offer.term_months"
+    ]
+    assert missing_required(dict(base, loan_months=36.0, offer_term=48)) == []
+
+
 def test_format_money_never_shows_signs():
     assert format_money(1225.09) == "$1,225.09"
     assert format_money(-0.0) == "$0.00"

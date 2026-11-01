@@ -155,13 +155,23 @@ def describe_wait_result(compared: Any) -> str:
     return f"At {rate}, waiting {total}, {connector} {timing}."
 
 
+def _whole_months(months: Any, name: str) -> int:
+    """Month counts are counts: 36.9 fails loudly instead of truncating to
+    36, which would compare a term the user never typed. Whole-valued
+    floats (36.0 from widgets and extraction) convert cleanly."""
+    if (isinstance(months, bool) or not isinstance(months, (int, float))
+            or not float(months).is_integer()):
+        raise ValueError(f"{name} must be a whole number of months, got {months!r}")
+    return int(months)
+
+
 def build_current_loan(balance: float, rate_pct: float, months: int, penalty: float) -> CurrentLoan:
     """Confirmed inputs to engine terms. Percent-to-decimal is code's job;
     the engine validates ranges last and raises on bad input."""
     return CurrentLoan(
         balance=balance,
         annual_rate=rate_pct / 100,
-        remaining_months=int(months),
+        remaining_months=_whole_months(months, "remaining_months"),
         prepayment_penalty=penalty,
     )
 
@@ -170,7 +180,7 @@ def build_offer(rate_pct: float, term_months: int, fees: float, fees_financed: b
     """Confirmed inputs to engine terms for the offer under evaluation."""
     return RefinanceOffer(
         annual_rate=rate_pct / 100,
-        term_months=int(term_months),
+        term_months=_whole_months(term_months, "term_months"),
         fees=fees,
         fees_financed=bool(fees_financed),
     )
@@ -267,6 +277,12 @@ def stated_but_ungrounded(prefix: str, name: str, result: Any) -> bool:
     return outcome is not None and outcome.status != "grounded" and bool(outcome.quote)
 
 
+_WHOLE_MONTHS = (
+    ("loan_months", "loan.remaining_months"),
+    ("offer_term", "offer.term_months"),
+)
+
+
 def missing_required(inputs: dict[str, Any], must_enter: frozenset = frozenset()) -> list[str]:
     """Blank loan terms always block; a zero balance, loan term, or offer
     term is structurally invalid, so it blocks too. Blank penalty and fees
@@ -283,6 +299,15 @@ def missing_required(inputs: dict[str, Any], must_enter: frozenset = frozenset()
                 continue
             missing.append(label)
         elif key in _STRUCTURAL_POSITIVES and value <= 0:
+            missing.append(label)
+    for key, label in _WHOLE_MONTHS:
+        # Fractional months block like a blank: retyping beats truncating.
+        # Whole-valued floats pass; the builders reject the rest loudly too.
+        value = inputs.get(key)
+        if value is None or label in missing:
+            continue
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not float(value).is_integer()):
             missing.append(label)
     return missing
 
@@ -743,6 +768,8 @@ def get_explanation(state: Any, result: Any, decision: Any,
     fresh key re-runs the ladder (draft → verify → rewrite → template);
     anything else returns the stored text without another model call. Past
     the budget, the template serves with the limit reason and no model call.
+    The narrative covers verdict, comparison, and split only — never wait
+    scenarios, which the page renders separately below (decision 16).
     """
     key = explanation_key(state["inputs"])
     cached = state.get("explanation")
@@ -844,11 +871,11 @@ def _page_results(st: Any) -> None:
     )
     # Only waits shorter than the remaining term: waiting past payoff
     # leaves nothing to refinance.
-    options = wait_options(int(inputs["loan_months"]))
+    options = wait_options(current.remaining_months)
     if not options:
         st.write(
             "Waiting is off the table: your loan pays off in "
-            f"{int(inputs['loan_months'])} months, so there is nothing "
+            f"{current.remaining_months} months, so there is nothing "
             "left to refinance by waiting."
         )
         compared = None
