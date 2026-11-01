@@ -59,19 +59,19 @@ tokens, summed across the run.
 
 ## 4. Run history
 
-| Metric | dev-01 | dev-02 | dev-03 |
-|---|---|---|---|
-| Grounded + correct | 82/98 (83.7%) | 94/98 (95.9%) | 95/98 (96.9%) |
-| Wrong-value | 0/104 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) |
-| Confirm-edit rate | 22/104 (21.2%) | 5/99 (5.1%) | 4/99 (4.0%) |
-| Explanation | 10 / 2 / 1 | 10 / 3 / 0 | 12 / 1 / 0 |
-| Verdict flips | 0 | 0 | 0 |
-| Cache ratio | 21228/30892 (68.7%) | 21906/24900 (88.0%) | 16507/23165 (71.3%) |
-| Model calls | 59 | 49 | 46 |
+| Metric | dev-01 | dev-02 | dev-03 | dev-04 |
+|---|---|---|---|---|
+| Grounded + correct | 82/98 (83.7%) | 94/98 (95.9%) | 95/98 (96.9%) | 96/98 (98.0%) |
+| Wrong-value | 0/104 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) |
+| Confirm-edit rate | 22/104 (21.2%) | 5/99 (5.1%) | 4/99 (4.0%) | 3/99 (3.0%) |
+| Explanation | 10 / 2 / 1 | 10 / 3 / 0 | 12 / 1 / 0 | 12 / 0 / 1 |
+| Verdict flips | 0 | 0 | 0 | 0 |
+| Cache ratio | 21228/30892 (68.7%) | 21906/24900 (88.0%) | 16507/23165 (71.3%) | 18216/28109 (64.8%) |
+| Model calls | 59 | 49 | 46 | 55 |
 
 Explanation columns read verified / rewritten / template. Full per-scenario
-tables are in `docs/eval/dev-01-REPORT.md`, `dev-02-REPORT.md`, and
-`dev-03-REPORT.md`. `dev-01` is the frozen baseline.
+tables are in `docs/eval/dev-01-REPORT.md` through `docs/eval/dev-04-REPORT.md`.
+`dev-01` is the frozen baseline.
 
 dev-01 to dev-02 was driven by quote-only attribution (decision 21) plus
 flag counting (decision 22). Adjacent amounts like "APR, 48 months" stopped
@@ -113,9 +113,11 @@ user types 280.0. The must-choose flag has stated fees with no stated
 method, so the user picks. "3 years" states no month word, so 36 stays
 user-entered. The fourth was a known parser gap at the time: the
 spoken-word rate ("four point seven nine") parsed to no number for lack
-of "point" support. That support has since landed in the parser (strict
-decimals; malformed forms parse to nothing); past runs are not re-scored,
-and a future run will show whether that fourth fix disappears.
+of "point" support. dev-04 closed it: the spoken-rate scenario grounds
+8/8 with the strict-decimal parser, and past runs are not re-scored.
+dev-04 is also the first full run through the judge path — 12 verified
+narratives plus one `judge_unavailable` template where the judge call
+itself errored during recording.
 
 The dev set found and fixed real problems: decisions 21 through 24 came out
 of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out
