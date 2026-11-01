@@ -147,6 +147,3 @@ def rasterize_pdf(data: bytes, max_pages: int = MAX_VISION_PAGES) -> list[bytes]
                 f"{max_pages} — re-upload just the statement pages")
         return [page.get_pixmap(dpi=150).tobytes("png")
                 for page in document]
-    if suffix in _IMAGE_MIME:
-        return transcribe_image(data, _IMAGE_MIME[suffix], client=client), "vision"
-    raise ValueError(f"unsupported file {filename}: upload .txt, .pdf, .png, or .jpg")

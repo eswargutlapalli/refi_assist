@@ -132,24 +132,28 @@ same grounding check (`python3 -m eval.vision_check --data eval/scenarios`):
 
 - grounded and correct: 86/99 (86.9%) vs 95/98 (96.9%) on text;
 - wrong values: 2 — `fees-method-unstated.loan.remaining_months`
-  (transcript perfect; extraction misattributed on the rerun) and
-  `no-penalty-mentioned.loan.balance` (vision read $19,800.00 as
-  $18,800.00, a single-digit misread).
+  (cause unresolved: the run saved no transcripts, and a later
+  re-transcription read clean, so extraction variance and an unsaved
+  transcript misread both remain possible) and
+  `no-penalty-mentioned.loan.balance` (a later re-transcription showed
+  $19,800.00 read as $18,800.00, a single-digit misread).
 
 The bar (zero wrong, grounding within 10 points) is not met, so this
-section stays as the honest record. Both failures are the exact class
-the confirm gate exists to catch: the transcript sits in the editable
-box, the quote proves what was copied, and the user fixes the digit
-before anything computes. PDFs read their text layer locally with no
-vision involved; only photos, screenshots, and scans take the vision path.
+section stays as the honest record. Both failures are the class the
+confirm gate exists to catch: the transcript sits in the editable box,
+the quote proves what was copied, and the user fixes the digit before
+anything computes. PDFs read their text layer locally with no vision
+involved; only photos, screenshots, and scans take the vision path.
 
 Rerun with the wrapping renderer (transcripts saved under `eval/runs/`,
-gitignored): 94/99 grounded with 1 wrong. The saved transcript settles
-the recurring case — vision read "46 payments remaining" as "48 payments
-remaining", and extraction grounded 48 against the quote "48 payments
-remaining", a perfect copy of a misread transcript. Every layer after
-vision behaved correctly; the digit error sat in plain sight where the
-confirm page shows it. The bar still stands unmet at 1 wrong.
+gitignored): 94/99 grounded with 1 wrong. The saved transcript proves
+the rerun's miss, on the same field: vision read "46 payments remaining"
+as "48 payments remaining", and extraction grounded 48 against the quote
+"48 payments remaining", a perfect copy of a misread transcript. Whether
+the first run's miss on that field was the same misread is unresolved —
+run 1 saved no transcripts. The checker itself stands exonerated by
+probe: all six wrong months-pairings reject. The bar still stands unmet
+at 1 wrong.
 
 ## 7. What the eval does not cover
 
