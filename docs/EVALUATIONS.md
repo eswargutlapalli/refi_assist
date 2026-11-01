@@ -122,15 +122,41 @@ of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out
 set was written separately and never seen during development. It runs once
 at the freeze and gets its own column.
 
-## 6. What the eval does not cover
+## 6. Vision transcription check (Nov 1)
+
+Each dev scenario text rendered to PNG (`tests/_render.py`, test-only),
+transcribed by live vision, extracted by the live calls, scored by the
+same grounding check (`python3 -m eval.vision_check --data eval/scenarios`):
+
+- grounded and correct: 86/99 (86.9%) vs 95/98 (96.9%) on text;
+- wrong values: 2 — `fees-method-unstated.loan.remaining_months`
+  (transcript perfect; extraction misattributed on the rerun) and
+  `no-penalty-mentioned.loan.balance` (vision read $19,800.00 as
+  $18,800.00, a single-digit misread).
+
+The bar (zero wrong, grounding within 10 points) is not met, so this
+section stays as the honest record. Both failures are the exact class
+the confirm gate exists to catch: the transcript sits in the editable
+box, the quote proves what was copied, and the user fixes the digit
+before anything computes. PDFs read their text layer locally with no
+vision involved; only photos, screenshots, and scans take the vision path.
+
+Rerun with the wrapping renderer (transcripts saved under `eval/runs/`,
+gitignored): 94/99 grounded with 1 wrong. The saved transcript settles
+the recurring case — vision read "46 payments remaining" as "48 payments
+remaining", and extraction grounded 48 against the quote "48 payments
+remaining", a perfect copy of a misread transcript. Every layer after
+vision behaved correctly; the digit error sat in plain sight where the
+confirm page shows it. The bar still stands unmet at 1 wrong.
+
+## 7. What the eval does not cover
 
 Hedging or softening the verdict passes the word-list check; catching it is
 the claim judge's job (§5 above), live on Muse Spark Open via Baseten, as is
-right number with wrong meaning. Statement photos, screenshots, and PDFs are
-not yet evaluated; text only. No fine-tuning signal exists yet; the Fireworks
-experiment waits on the core build.
+right number with wrong meaning. No fine-tuning signal exists yet; the
+Fireworks experiment waits on the core build.
 
-## 6. Reproduce it
+## 8. Reproduce it
 
 Recording spends model credit (about 50 calls for 13 scenarios) and needs
 `MODEL_API_KEY` in the environment. Scoring is offline and free. Run folders

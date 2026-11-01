@@ -707,6 +707,29 @@ def test_not_stated_still_needs_the_user():
         result.to_current_loan()
 
 
+def test_misattributed_months_stay_rejected():
+    # Pins the fees-method-unstated incident response: every wrong pairing
+    # for months rejects — whole-text quotes, neighbor values, cross-field
+    # claims — and only the right pairing grounds.
+    from extract import check_field
+
+    source = ("Auto loan statement: payoff balance $16,800.00, fixed APR "
+              "9.6%, 46 payments remaining. Prepayment penalty: $0.")
+    assert check_field(16800.0, source, source,
+                       field="remaining_months", whole=True) is False
+    assert check_field(
+        0.0, "46 payments remaining. Prepayment penalty: $0", source,
+        field="remaining_months", whole=True) is False
+    assert check_field(46.0, "payoff balance $16,800.00", source,
+                       field="remaining_months", whole=True) is False
+    assert check_field(9.6, "fixed APR 9.6%, 46 payments remaining", source,
+                       field="remaining_months", whole=True) is False
+    assert check_field(16800.0, "payoff balance $16,800.00", source,
+                       field="remaining_months", whole=True) is False
+    assert check_field(46.0, "46 payments remaining", source,
+                       field="remaining_months", whole=True) is True
+
+
 def test_word_number_spans_reports_spans_and_values():
     # verify.py classifies spelled-out runs by position: same parser as
     # _word_amounts, plus the character spans the narrative check needs.

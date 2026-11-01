@@ -37,6 +37,7 @@ from explainer import (
     explain_verdict,
 )
 from extract import ExtractionResult, FieldOutcome, extract_current_loan, extract_refinance_offer
+from statements import VISION_LIMIT, read_statement_upload
 from verify import build_template, split_rows  # one source for the split wording (decision 12)
 
 DISCLAIMER = (
@@ -474,26 +475,79 @@ def _read_upload(upload: Any) -> str | None:
         raise ValueError(f"could not read {upload.name} as text: {exc}")
 
 
+def _apply_upload(state: Any, target: str, applied: str, upload: Any,
+                  text: str, source: str | None) -> None:
+    """Store one upload's outcome: text, provenance, and fingerprint.
+
+    The fingerprint lands on failures too, so the same doomed upload is
+    never retried — and never spends — on the next rerun. Only fresh
+    bytes (is_fresh_upload) reach here, so a fixed file still re-runs.
+    """
+    state[target] = text
+    state[target + "_source"] = source
+    state[applied] = _upload_fingerprint(upload)
+
+
 def _page_input(st: Any) -> None:
-    """Page 1: statements in — typed, pasted, or uploaded as text files."""
+    """Page 1: statements in — typed, pasted, or uploaded as files."""
     st.header("1 · Enter your statements")
     st.text_area("Current loan statement", key="loan_text")
     st.text_area("Refinance offer", key="offer_text")
-    st.write("Or upload them as `.txt` files — the text lands above, editable.")
+    st.write("Or upload them — `.txt`, PDF, or a photo/screenshot — "
+             "the text lands above, editable.")
     for key, label, target, applied in (
         ("up_loan_file", "Upload loan statement", "loan_text", "applied_loan_file"),
         ("up_offer_file", "Upload refinance offer", "offer_text", "applied_offer_file"),
     ):
-        upload = st.file_uploader(label, type=["txt", "md"], key=key)
+        upload = st.file_uploader(
+            label, type=["txt", "md", "pdf", "png", "jpg", "jpeg"], key=key)
         if is_fresh_upload(upload, st.session_state.get(applied)):
+            # Text files decode directly; PDFs and images go through
+            # statements.py, whose transcript lands in the same editable
+            # box — extraction never sees anything else.
+            raw = upload.getvalue()
+            budget = {"used": st.session_state.get("vision_used", 0),
+                      "limit": VISION_LIMIT}
             try:
-                st.session_state[target] = _read_upload(upload) or ""
+                if upload.name.lower().endswith((".txt", ".md")):
+                    text, source = _read_upload(upload) or "", "text-file"
+                else:
+                    with st.spinner("Reading your statement…"):
+                        text, source = read_statement_upload(
+                            raw, upload.name, budget=budget)
             except ValueError as exc:
                 st.error(f"Upload failed: {exc}")
+                # Fingerprint the failure too: without it every rerun
+                # would retry the same doomed upload and spend again.
+                # The box keeps whatever it held — never blanked by this.
+                _apply_upload(st.session_state, target, applied, upload,
+                              st.session_state.get(target, ""), None)
             else:
-                st.session_state[applied] = _upload_fingerprint(upload)
-    st.caption("Photos, screenshots, and PDFs arrive in a later slice — "
-               "for now, paste their text above or upload a `.txt` file.")
+                _apply_upload(st.session_state, target, applied, upload,
+                              text, source)
+                if source == "vision" and upload.name.lower().endswith(
+                        (".png", ".jpg", ".jpeg")):
+                    st.session_state[target + "_image"] = raw
+            st.session_state["vision_used"] = budget["used"]
+    for target in ("loan_text", "offer_text"):
+        source = st.session_state.get(target + "_source")
+        image = st.session_state.get(target + "_image")
+        if source == "vision" and image is not None:
+            left, right = st.columns(2)
+            with left:
+                st.image(image, caption="Your uploaded image")
+            with right:
+                st.write(st.session_state.get(target, ""))
+            st.caption("Transcript beside your photo, screenshot, or scan — "
+                       "check it carefully. A consistent misread is caught "
+                       "only at the confirm page.")
+        elif source == "vision":
+            st.caption("Transcript from your scan — check it carefully. "
+                       "A consistent misread is caught only at the confirm "
+                       "page.")
+        elif source == "pdf-text":
+            st.caption("Text from your PDF — check it, then confirm every "
+                       "number on the next page.")
     st.caption("Continuing parses both statements automatically — "
                "you review, edit, and confirm everything on the next page.")
     if extraction_blocked(st.session_state):
@@ -510,11 +564,14 @@ def _page_input(st: Any) -> None:
 
 def field_caption(prefix: str, name: str, result: Any,
                   blank_means_none: bool = False,
-                  read_error: bool = False) -> str:
+                  read_error: bool = False,
+                  source: str | None = None) -> str:
     """Per-field provenance under its confirm box. A failed read says so.
     Grounded names the quote it came from in plain text; unstated asks for
     typing (or a blank where blank means none); stated-but-ungrounded
-    always asks for typing, since blank is the likeliest wrong value."""
+    always asks for typing, since blank is the likeliest wrong value.
+    Fields read from a photo carry their own caution instead of the bare
+    quote: the transcript, not the statement, is what the quote proves."""
     if read_error:
         return "couldn't read the statement"
     if result is None:
@@ -524,6 +581,9 @@ def field_caption(prefix: str, name: str, result: Any,
         )
     outcome = result.fields.get(name)
     if outcome is not None and outcome.status == "grounded" and outcome.quote:
+        if source == "vision":
+            return ("read from your photo — check against the original "
+                    f"(from: {outcome.quote})")
         return f"from: {outcome.quote}"
     if outcome is not None and outcome.status == "not_stated":
         return (
@@ -661,6 +721,8 @@ def reset_all(state: Any) -> None:
         "loan_text", "offer_text", "loan_result", "offer_result",
         "loan_error", "offer_error", "extracted_loan_text",
         "extracted_offer_text", "applied_loan_file", "applied_offer_file",
+        "loan_text_source", "offer_text_source",
+        "loan_text_image", "offer_text_image", "vision_used",
         "up_loan_file", "up_offer_file", "wait_months", "w_wait_rate_pct",
         # Kept across reset like the extraction budget: the narrator cap is
         # per session, so Start over clears the cached text but never refills
@@ -724,7 +786,8 @@ def _cap(st: Any, prefix: str, input_key: str, name: str, blank: bool = False) -
         return edit
     return field_caption(
         prefix, name, state.get(f"{prefix}_result"), blank,
-        read_error=bool(state.get(f"{prefix}_error")))
+        read_error=bool(state.get(f"{prefix}_error")),
+        source=state.get(f"{prefix}_text_source"))
 
 
 def explanation_key(inputs: dict[str, Any]) -> tuple:

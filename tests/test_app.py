@@ -663,6 +663,48 @@ def test_budget_survives_start_over():
     assert fake.calls == 0
 
 
+def test_reset_clears_transcript_sources():
+    from app import reset_all
+
+    state = {"loan_text_source": "vision", "offer_text_source": "pdf-text",
+             "loan_text_image": b"png", "vision_used": 3, "page": 3}
+    reset_all(state)
+    assert "loan_text_source" not in state
+    assert "offer_text_source" not in state
+    assert "loan_text_image" not in state
+    assert state.get("vision_used", 0) == 0
+
+
+def test_apply_upload_fingerprints_failures_too():
+    import types
+    from app import _apply_upload
+
+    upload = types.SimpleNamespace(
+        name="scan.pdf", getvalue=lambda: b"%PDF-doomed")
+    state = {"loan_text": "kept"}
+    _apply_upload(state, "loan_text", "applied_loan_file", upload,
+                  state["loan_text"], None)
+    assert state["loan_text"] == "kept"
+    assert state["loan_text_source"] is None
+    assert state["applied_loan_file"][0] == "scan.pdf"
+
+
+def test_image_caption_names_photo_check():
+    from app import field_caption
+    from extract import FieldOutcome
+
+    result = types.SimpleNamespace(fields={
+        "balance": FieldOutcome("balance", 18500.0,
+                               "Outstanding balance: $18,500.00", "grounded"),
+    })
+    caption = field_caption("loan", "balance", result, source="vision")
+    assert caption.startswith("read from your photo")
+    assert "check against the original" in caption
+    assert "Outstanding balance: $18,500.00" in caption
+    plain = field_caption("loan", "balance", result)
+    assert not plain.startswith("read from your photo")
+
+
 def test_limit_shows_unavailable_status_plus_message():
     from explainer import STATUS_UNAVAILABLE
     from app import (
