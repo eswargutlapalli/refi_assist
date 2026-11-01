@@ -12,6 +12,7 @@ prompt; allowing a value means finding it in that result, never recomputing.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -163,7 +164,9 @@ def draft_narrative(
     """One narration draft. Narratives earn reasoning (medium); extraction
     stays minimal — effort is set per slice, never global. When usage_sink
     is given, the call's usage dump is appended so offline scoring can
-    account every call without a second pass."""
+    account every call without a second pass. The dump carries elapsed_s,
+    like extraction: wall time is a call-site fact."""
+    start = time.monotonic()
     response = complete(
         messages,
         effort=EXPLANATION_EFFORT,
@@ -171,7 +174,8 @@ def draft_narrative(
         client=client,
     )
     if usage_sink is not None:
-        usage_sink.append({"model": response.model, **response.usage.as_dict()})
+        usage_sink.append({"model": response.model, **response.usage.as_dict(),
+                           "elapsed_s": round(time.monotonic() - start, 2)})
     return response.text
 
 
@@ -184,6 +188,7 @@ def explain_verdict(
     on_draft: Any = None,
     judge_client: Any = None,
     judge_usage_sink: list[dict[str, Any]] | None = None,
+    judge_verdict_sink: list[dict[str, Any]] | None = None,
 ) -> ExplainResult:
     """Draft, verify, once rewrite with the bad numbers named, else template.
 
@@ -228,6 +233,9 @@ def explain_verdict(
         except LlmError:
             return done(build_template(result, decision), "template",
                         attempts, REASON_JUDGE_DOWN)
+        if judge_verdict_sink is not None:
+            judge_verdict_sink.append({"passed": found.passed,
+                                       "problems": list(found.problems)})
         if not found.passed:
             return done(build_template(result, decision), "template",
                         attempts, REASON_MEANING_FAILED)

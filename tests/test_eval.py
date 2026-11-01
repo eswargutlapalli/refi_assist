@@ -144,7 +144,7 @@ def test_record_clean_verified_first_pass(tmp_path):
     for entry in rec["usage"]:
         assert set(entry) == {
             "purpose", "model", "prompt_tokens", "completion_tokens",
-            "reasoning_tokens", "cached_tokens",
+            "reasoning_tokens", "cached_tokens", "elapsed_s",
         }
     assert rec["engine"]["verdict_choice"] == "refinance_now"
 

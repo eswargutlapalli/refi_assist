@@ -290,50 +290,81 @@ def test_split_rows_use_directional_words():
     assert len(rows) == 3
 
 
-def test_apply_deploy_secret_fills_missing_only(monkeypatch):
+def _saved_keys(*names):
+    # Manual save/restore: the helper writes real env vars via setdefault,
+    # which monkeypatch cannot track — only a finally restores them.
+    import os
+
+    return {name: os.environ.get(name) for name in names}
+
+
+def _restore_keys(saved):
+    import os
+
+    for name, value in saved.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def test_apply_deploy_secret_fills_missing_only():
     import os
     import types
 
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    _apply_deploy_secret(types.SimpleNamespace(
-        secrets={"MODEL_API_KEY": "s3cr3t"}))
-    assert os.environ["MODEL_API_KEY"] == "s3cr3t"
-    monkeypatch.setenv("MODEL_API_KEY", "exported")
-    _apply_deploy_secret(types.SimpleNamespace(
-        secrets={"MODEL_API_KEY": "s3cr3t"}))
-    assert os.environ["MODEL_API_KEY"] == "exported"
+    saved = _saved_keys("MODEL_API_KEY")
+    try:
+        os.environ.pop("MODEL_API_KEY", None)
+        _apply_deploy_secret(types.SimpleNamespace(
+            secrets={"MODEL_API_KEY": "s3cr3t"}))
+        assert os.environ["MODEL_API_KEY"] == "s3cr3t"
+        os.environ["MODEL_API_KEY"] = "exported"
+        _apply_deploy_secret(types.SimpleNamespace(
+            secrets={"MODEL_API_KEY": "s3cr3t"}))
+        assert os.environ["MODEL_API_KEY"] == "exported"
+    finally:
+        _restore_keys(saved)
 
 
-def test_apply_deploy_secret_copies_baseten_key(monkeypatch):
+def test_apply_deploy_secret_copies_baseten_key():
     import os
     import types
 
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    monkeypatch.delenv("BASETEN_API_KEY", raising=False)
-    _apply_deploy_secret(types.SimpleNamespace(
-        secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
-    assert os.environ["MODEL_API_KEY"] == "m"
-    assert os.environ["BASETEN_API_KEY"] == "b"
-    monkeypatch.setenv("MODEL_API_KEY", "exported-m")
-    monkeypatch.setenv("BASETEN_API_KEY", "exported-b")
-    _apply_deploy_secret(types.SimpleNamespace(
-        secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
-    assert os.environ["MODEL_API_KEY"] == "exported-m"
-    assert os.environ["BASETEN_API_KEY"] == "exported-b"
+    saved = _saved_keys("MODEL_API_KEY", "BASETEN_API_KEY")
+    try:
+        os.environ.pop("MODEL_API_KEY", None)
+        os.environ.pop("BASETEN_API_KEY", None)
+        _apply_deploy_secret(types.SimpleNamespace(
+            secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
+        assert os.environ["MODEL_API_KEY"] == "m"
+        assert os.environ["BASETEN_API_KEY"] == "b"
+        os.environ["MODEL_API_KEY"] = "exported-m"
+        os.environ["BASETEN_API_KEY"] = "exported-b"
+        _apply_deploy_secret(types.SimpleNamespace(
+            secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
+        assert os.environ["MODEL_API_KEY"] == "exported-m"
+        assert os.environ["BASETEN_API_KEY"] == "exported-b"
+    finally:
+        _restore_keys(saved)
 
 
-def test_apply_deploy_secret_tolerates_no_secrets(monkeypatch):
+def test_apply_deploy_secret_tolerates_no_secrets():
     import types
 
     class NoSecrets(dict):
         def __getitem__(self, key):
             raise KeyError(key)
 
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    _apply_deploy_secret(types.SimpleNamespace(secrets=NoSecrets()))  # must not raise
-    import os
+    saved = _saved_keys("MODEL_API_KEY")
+    try:
+        import os
 
-    assert "MODEL_API_KEY" not in os.environ
+        os.environ.pop("MODEL_API_KEY", None)
+        _apply_deploy_secret(types.SimpleNamespace(secrets=NoSecrets()))  # must not raise
+
+        assert "MODEL_API_KEY" not in os.environ
+    finally:
+        _restore_keys(saved)
 
 
 def test_format_rate_floor_never_rounds_up():
@@ -407,7 +438,7 @@ def test_parse_side_failure_clears_result_and_stores_error():
     import contextlib
     from app import INPUT_DEFAULTS, LOAN_FIELDS, _parse_side
 
-    def boom(text):
+    def boom(text, **kwargs):
         raise ValueError("MODEL_API_KEY is not set")
 
     class FakePage:
@@ -687,6 +718,155 @@ def test_apply_upload_fingerprints_failures_too():
     assert state["loan_text"] == "kept"
     assert state["loan_text_source"] is None
     assert state["applied_loan_file"][0] == "scan.pdf"
+
+
+def test_trace_render_mixed_ladder_fresh_then_cached():
+    # End to end at app level with a fake Streamlit: extraction quote
+    # pairs, rejected-draft texts with outcomes, and judge kinds render
+    # fresh; a cached rerun relabels without new calls and the totals line
+    # owns counting the path behind the answer on both renders.
+    import contextlib
+    import types
+    from app import (INPUT_DEFAULTS, LOAN_FIELDS, OFFER_FIELDS, _parse_side,
+                     _render_trace, explanation_key, get_explanation)
+    from extract import ExtractionResult, FieldOutcome
+
+    class _JudgeCompletions:
+        def __init__(self, script):
+            self.script = list(script)
+            self.calls = []
+
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            item = self.script.pop(0)
+            message = types.SimpleNamespace(content=item, tool_calls=None)
+            return types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=message)],
+                usage=None,
+                model="meta-models/muse-spark-open-1026")
+
+    class _JudgeFakeClient:
+        def __init__(self, script):
+            self.chat = types.SimpleNamespace(
+                completions=_JudgeCompletions(script))
+
+        @property
+        def calls(self):
+            return self.chat.completions.calls
+
+    class _Expander:
+        def __init__(self, log, label):
+            self._log = log
+            self._label = label
+
+        def __enter__(self):
+            self._log.append(f"<{self._label}>")
+            return _FakeSt(self._log, {})
+
+        def __exit__(self, *args):
+            self._log.append(f"</{self._label}>")
+            return False
+
+    class _FakeSt:
+        def __init__(self, log, session_state):
+            self._log = log
+            self.session_state = session_state
+
+        def expander(self, label, **kwargs):
+            self._log.append(f"EXPANDER {label}")
+            return _Expander(self._log, label)
+
+        def write(self, text):
+            self._log.append(f"WRITE {text}")
+
+        def caption(self, text):
+            self._log.append(f"CAPTION {text}")
+
+        def spinner(self, _message):
+            return contextlib.nullcontext()
+
+    def _usage():
+        return {"model": "m", "prompt_tokens": 10, "completion_tokens": 5,
+                "reasoning_tokens": 0, "cached_tokens": 0, "elapsed_s": 0.1}
+
+    def _loan_action(text, usage_sink=None):
+        if usage_sink is not None:
+            usage_sink.append(_usage())
+        return ExtractionResult(
+            fields={
+                "balance": FieldOutcome("balance", 20000.0,
+                                       "Balance $20,000.00", "grounded"),
+                "annual_rate_pct": FieldOutcome("annual_rate_pct", 9.0,
+                                               "APR 9%", "grounded"),
+                "remaining_months": FieldOutcome("remaining_months", 40.0,
+                                                "40 months", "grounded"),
+                "prepayment_penalty": FieldOutcome(
+                    "prepayment_penalty", None, None, "not_stated"),
+            }, attempts=1)
+
+    def _offer_action(text, usage_sink=None):
+        if usage_sink is not None:
+            usage_sink.append(_usage())
+        return ExtractionResult(
+            fields={
+                "annual_rate_pct": FieldOutcome("annual_rate_pct", 5.0,
+                                               "5% offer", "grounded"),
+                "term_months": FieldOutcome("term_months", 60.0,
+                                            "60 months", "grounded"),
+                "fees": FieldOutcome("fees", 0.0, "no fees", "grounded"),
+                "fees_financed": FieldOutcome("fees_financed", False,
+                                              "no fees", "grounded"),
+            }, attempts=1)
+
+    state = {"inputs": dict(INPUT_DEFAULTS), "extracted": {},
+             "loan_text": "loan words", "offer_text": "offer words"}
+    page = _FakeSt([], state)
+    _parse_side(page, "loan", "loan", LOAN_FIELDS, _loan_action)
+    _parse_side(page, "offer", "offer", OFFER_FIELDS, _offer_action)
+
+    result, decision = _explain_fixture()
+    bad = f"{decision.headline} {decision.tradeoff_note} Bonus $9,999.99."
+    good = f"{decision.headline} {decision.tradeoff_note}"
+    fake = _ExplainFakeClient([bad, good])
+    judge_client = _JudgeFakeClient(
+        ['{"passed": false, "problems": ["softening"]}'])
+    rates = (9.0, 5.0)
+    cached_hit = (state.get("explanation") is not None
+                  and state["explanation"].get("key")
+                  == explanation_key(state["inputs"]))
+    assert cached_hit is False
+    out = get_explanation(state, result, decision, rates, client=fake,
+                          judge_client=judge_client)
+    assert (out.kind, out.reason) == ("template", "failed_meaning_check")
+    fresh_log: list = []
+    _render_trace(_FakeSt(fresh_log, state), state, state["inputs"],
+                  result, decision, (), None, cached_hit)
+    fresh = "\n".join(fresh_log)
+    assert "20,000.00" in fresh
+    assert ("Rejected by the number check — not shown as a result"
+            in fresh)
+    assert "9,999.99" in fresh and decision.headline[:20] in fresh
+    assert "headline: " in fresh and "figure: " in fresh
+    assert "softening" in fresh
+    assert "4 model calls behind this answer" in fresh
+
+    meta_calls = fake.calls
+    judge_calls = len(judge_client.calls)
+    cached_hit = (state.get("explanation") is not None
+                  and state["explanation"].get("key")
+                  == explanation_key(state["inputs"]))
+    assert cached_hit is True
+    out = get_explanation(state, result, decision, rates, client=fake,
+                          judge_client=judge_client)
+    assert fake.calls == meta_calls
+    assert len(judge_client.calls) == judge_calls
+    cached_log: list = []
+    _render_trace(_FakeSt(cached_log, state), state, state["inputs"],
+                  result, decision, (), None, cached_hit)
+    cached = "\n".join(cached_log)
+    assert "from cache, no new calls" in cached
+    assert "4 model calls behind this answer" in cached
+    assert "softening" in cached
 
 
 def test_image_caption_names_photo_check():

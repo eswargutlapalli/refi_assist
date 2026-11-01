@@ -30,14 +30,18 @@ from engine import (
     wait_thresholds,
 )
 from explainer import (
+    EXPLAINER_PROMPT_CACHE_KEY,
     REASON_LIMIT_REACHED,
     REASON_MODEL_UNAVAILABLE,
     STATUS_UNAVAILABLE,
     ExplainResult,
+    explainer_figures,
     explain_verdict,
 )
-from extract import ExtractionResult, FieldOutcome, extract_current_loan, extract_refinance_offer
+from extract import EXTRACT_PROMPT_CACHE_KEY, ExtractionResult, FieldOutcome, extract_current_loan, extract_refinance_offer
+from llm import DEFAULT_EFFORT, EXPLANATION_EFFORT, JUDGE_PROMPT_CACHE_KEY
 from statements import VISION_LIMIT, read_statement_upload
+from trace import build_trace, code_entry, margin_line, model_entry
 from verify import build_template, split_rows  # one source for the split wording (decision 12)
 
 DISCLAIMER = (
@@ -415,7 +419,8 @@ def record_extraction(state: Any) -> None:
 
 def _parse_side(st: Any, label: str, prefix: str, names: tuple[str, ...], action: Any) -> None:
     """Run one side's extraction if its text is new, and record the outcome.
-    Failures are stored for page 2 — the manual path below still works."""
+    Failures are stored for page 2 — the manual path below still works.
+    Each call's usage lands in the trace: model, tokens, and wall time."""
     state = st.session_state
     text = state[f"{prefix}_text"]
     if not needs_extract(text, state.get(f"extracted_{prefix}_text"), state.get(f"{prefix}_result")):
@@ -423,9 +428,10 @@ def _parse_side(st: Any, label: str, prefix: str, names: tuple[str, ...], action
     if extraction_blocked(state):
         return  # budget spent: boxes keep what the user typed, no API call
     record_extraction(state)
+    sink: list[dict[str, Any]] = []
     try:
         with st.spinner(f"Reading {label} terms…"):
-            result = action(text)
+            result = action(text, usage_sink=sink)
     except Exception as exc:  # fail loudly, on page 2, with the manual fallback beside it
         state[f"{prefix}_error"] = f"{label.capitalize()} extraction failed: {exc}"
         # A failed read resets the side like a fresh extraction with nothing
@@ -447,6 +453,18 @@ def _parse_side(st: Any, label: str, prefix: str, names: tuple[str, ...], action
         state[f"extracted_{prefix}_text"] = text
         state[f"{prefix}_error"] = None
         _apply_extraction(state, prefix, names, result)
+        detail = []
+        for name, outcome in result.fields.items():
+            if outcome.status == "grounded" and outcome.quote:
+                detail.append(f"{name}: {outcome.value} "
+                              f"(from: {outcome.quote})")
+            else:
+                detail.append(f"{name}: {outcome.status}")
+        state.setdefault("trace_steps", {})[f"extract-{prefix}"] = model_entry(
+            f"extract-{prefix}", f"{label.capitalize()} extraction",
+            f"{result.attempts} attempt(s)", sink,
+            effort=DEFAULT_EFFORT, cache_key=EXTRACT_PROMPT_CACHE_KEY,
+            input_key=text, detail=detail)
 
 
 def _upload_fingerprint(upload: Any) -> tuple[str, str]:
@@ -723,6 +741,7 @@ def reset_all(state: Any) -> None:
         "extracted_offer_text", "applied_loan_file", "applied_offer_file",
         "loan_text_source", "offer_text_source",
         "loan_text_image", "offer_text_image", "vision_used",
+        "trace_steps",
         "up_loan_file", "up_offer_file", "wait_months", "w_wait_rate_pct",
         # Kept across reset like the extraction budget: the narrator cap is
         # per session, so Start over clears the cached text but never refills
@@ -829,7 +848,8 @@ def record_explanation(state: Any) -> None:
 
 
 def get_explanation(state: Any, result: Any, decision: Any,
-                    rates_pct: tuple[float, ...], client: Any = None) -> ExplainResult:
+                    rates_pct: tuple[float, ...], client: Any = None,
+                    judge_client: Any = None) -> ExplainResult:
     """The checked narrative for these inputs, cached in session state. A
     fresh key re-runs the ladder (draft → verify → rewrite → template);
     anything else returns the stored text without another model call. Past
@@ -846,12 +866,95 @@ def get_explanation(state: Any, result: Any, decision: Any,
                              STATUS_UNAVAILABLE, 0,
                              "template", REASON_LIMIT_REACHED)
     record_explanation(state)
-    explained = explain_verdict(result, decision, rates_pct, client=client)
+    drafts: list[dict[str, Any]] = []
+    judge_sink: list[dict[str, Any]] = []
+    judge_verdicts: list[dict[str, Any]] = []
+
+    def _on_draft(attempt: int, text: str, checked: Any,
+                  usage: dict[str, Any]) -> None:
+        drafts.append({"attempt": attempt, "text": text, "ok": checked.ok,
+                       "bad": (len(checked.bad_amounts)
+                               + len(checked.bad_months)
+                               + len(checked.bad_rates)),
+                       "feedback": checked.feedback,
+                       "usage": usage})
+
+    explained = explain_verdict(result, decision, rates_pct, client=client,
+                                on_draft=_on_draft,
+                                judge_client=judge_client,
+                                judge_usage_sink=judge_sink,
+                                judge_verdict_sink=judge_verdicts)
+    sent = [f"headline: {decision.headline}",
+            *[f"figure: {line}"
+              for line in explainer_figures(result, rates_pct)]]
+    _store_ladder_trace(state, key, drafts, judge_sink, judge_verdicts,
+                        explained, sent)
     if explained.reason == REASON_MODEL_UNAVAILABLE:
         return explained  # outage, not an answer: the run counts, but the
     # next render retries instead of replaying a failed call's template
     state["explanation"] = {"key": key, "result": explained}
     return explained
+
+
+def _store_ladder_trace(state: Any, key: Any, drafts: list[dict[str, Any]],
+                        judge_sink: list[dict[str, Any]],
+                        judge_verdicts: list[dict[str, Any]],
+                        explained: Any,
+                        sent: list[str] | None = None) -> None:
+    """Trace records for one ladder run: the input the explainer was sent
+    (headline plus labeled figures, never the system prompt), the drafts
+    with their texts and outcomes, the number check per attempt, and the
+    meaning check with the judge's kinds when the ladder reached it.
+    Draft texts live in session memory only, inside the collapsed
+    section. Keyed so a reconfirmed edit rebuilds them; a cached hit
+    reuses them with the cache label instead."""
+    steps = state.setdefault("trace_steps", {})
+    usages = [draft["usage"] for draft in drafts]
+    detail = list(sent or [])
+    for draft in drafts:
+        if draft["ok"]:
+            detail.append(f"draft {draft['attempt']}: pass")
+        else:
+            detail.append(
+                "Rejected by the number check — not shown as a result "
+                f"(draft {draft['attempt']}: {draft['feedback']})")
+        detail.append(draft["text"])
+    outcome = {"verified": "pass first try", "rewritten": "pass on rewrite",
+               "template": f"template ({explained.reason})"}[explained.kind]
+    steps["explainer"] = model_entry(
+        "explainer", "Explanation", f"{len(drafts)} draft(s) -> {outcome}",
+        usages, effort=EXPLANATION_EFFORT,
+        cache_key=EXPLAINER_PROMPT_CACHE_KEY, input_key=key, detail=detail)
+    check_detail = [
+        f"attempt {draft['attempt']}: {'pass' if draft['ok'] else 'fail'}"
+        for draft in drafts
+    ]
+    if not drafts:
+        check_summary = "no drafts"
+    elif all(draft["ok"] for draft in drafts):
+        check_summary = "pass first try"
+    elif drafts[-1]["ok"]:
+        check_summary = "fail, pass on rewrite"
+    else:
+        check_summary = "fail -> template"
+    steps["number-check"] = code_entry(
+        "number-check", "Number check", check_summary,
+        detail=check_detail, input_key=key)
+    if judge_sink:
+        if judge_verdicts and judge_verdicts[0]["passed"]:
+            summary, detail_kinds = "judge: pass", ["pass"]
+        elif judge_verdicts:
+            kinds = judge_verdicts[0]["problems"]
+            summary = f"judge: flagged ({', '.join(kinds)})"
+            detail_kinds = list(kinds)
+        else:
+            summary = f"judge: {explained.reason or 'unavailable'}"
+            detail_kinds = [summary]
+        steps["meaning-check"] = model_entry(
+            "meaning-check", "Meaning check", summary,
+            judge_sink, effort=DEFAULT_EFFORT,
+            cache_key=JUDGE_PROMPT_CACHE_KEY, input_key=key,
+            detail=detail_kinds)
 
 
 def limit_notice(explained: ExplainResult) -> str | None:
@@ -914,6 +1017,9 @@ def _page_results(st: Any) -> None:
     else:
         st.write(f"Breakeven: month {result.breakeven_month}.")
 
+    cached_hit = (state.get("explanation") is not None
+                  and state["explanation"].get("key")
+                  == explanation_key(state["inputs"]))
     try:
         with st.spinner("Writing a plain-language explanation…"):
             explained = get_explanation(
@@ -1015,6 +1121,8 @@ def _page_results(st: Any) -> None:
                     ],
                 })
                 st.write(escape_display(describe_wait_result(compared)))
+    _render_trace(st, state, inputs, result, decision, options, compared,
+                  cached_hit)
     st.caption("Verdict from fixed code rules. " + DISCLAIMER)
     # Kept: results often send the user back to fix a number or priority,
     # or all the way back to restate the problem. The spacer column pushes
@@ -1028,6 +1136,86 @@ def _page_results(st: Any) -> None:
         if st.button("Start over", key="back_to_1", use_container_width=True):
             reset_all(st.session_state)
             st.rerun()
+
+
+def _render_trace(st: Any, state: Any, inputs: dict[str, Any],
+                  result: Any, decision: Any, options: Any,
+                  compared: Any, cached_hit: bool) -> None:
+    """The request trace: which checks ran, what each cost, what each saw.
+
+    Model steps replay their stored records; code steps rebuild from the
+    current comparison. Keys decide freshness: a reconfirmed edit drops
+    downstream entries, and a cached hit relabels them instead of
+    re-spending. Session memory only — nothing here is written to disk.
+    """
+    stored = dict(state.get("trace_steps", {}))
+    if cached_hit:
+        for name in ("explainer", "number-check", "meaning-check"):
+            if name in stored:
+                stored[name] = dict(stored[name], cache_hit=True)
+    grounding: list[str] = []
+    for prefix in ("loan", "offer"):
+        outcome = state.get(f"{prefix}_result")
+        if outcome is None:
+            continue
+        for name, field in outcome.fields.items():
+            grounding.append(f"{prefix}.{name}: {field.status}")
+    stored["grounding"] = code_entry(
+        "grounding", "Grounding", "quote in source, value among numbers",
+        detail=grounding)
+    edits = [note for key, note in
+             ((k, edited_note(inputs.get(k), state.get("extracted", {}).get(k),
+                              _EDIT_UNITS.get(k, "")))
+              for k in inputs)
+             if note]
+    stored["confirm"] = code_entry(
+        "confirm", "Confirm",
+        f"{len(edits)} edit(s)" if edits else "confirmed as extracted",
+        detail=edits or None)
+    stored["engine"] = code_entry(
+        "engine", "Comparison + verdict",
+        margin_line(result, decision, inputs.get("priority", "")))
+    if compared is not None:
+        wait_summary = (
+            f"wait {compared.plan.wait_months} months at "
+            f"{inputs.get('wait_rate_pct')}% -> "
+            f"{compared.plan.monthly:,.2f}/mo, {compared.plan.total:,.2f} total")
+    elif not options:
+        wait_summary = "waiting off the table: loan pays off first"
+    else:
+        wait_summary = "wait scenario not priced"
+    stored["wait"] = code_entry("wait", "Wait scenarios", wait_summary)
+    keys = {state.get("extracted_loan_text"), state.get("extracted_offer_text"),
+            explanation_key(inputs)}
+    built = build_trace(list(stored.values()), keys)
+    totals = built["totals"]
+    with st.expander("How this was checked", expanded=False):
+        st.caption("This session only — shown to you, never saved.")
+        ratio = ("—" if totals["cache_ratio"] is None
+                 else f"{totals['cache_ratio']:.0%}")
+        st.write(
+            f"{totals['calls']} model calls behind this answer · "
+            f"{totals['prompt']:,} prompt / {totals['completion']:,} "
+            f"completion / {totals['reasoning']:,} reasoning tokens · "
+            f"{totals['cached']:,} cached ({ratio}) · "
+            f"{totals['wall_s']:.1f}s wall time")
+        for entry in built["entries"]:
+            title = entry["title"]
+            if entry.get("cache_label"):
+                title += f" ({entry['cache_label']})"
+            with st.expander(title, expanded=False):
+                st.write(escape_display(entry["summary"] or "—"))
+                if entry.get("model") is not None:
+                    tokens = entry["tokens"]
+                    st.write(
+                        f"{entry['model']} · {entry['effort']} effort · "
+                        f"cache key {entry['cache_key']} · "
+                        f"{tokens['prompt']:,} + {tokens['completion']:,} + "
+                        f"{tokens['reasoning']:,} tokens "
+                        f"({tokens['cached']:,} cached) · "
+                        f"{entry['wall_s']:.1f}s")
+                for line in entry.get("detail") or []:
+                    st.write(escape_display(str(line)))
 
 
 def main() -> None:

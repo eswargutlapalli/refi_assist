@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -773,13 +774,17 @@ def _extract_with_retry(
     once with kind-only feedback, then clear what still fails. Round-one
     grounded fields stand; not_stated fields (null/null) are never re-asked.
     When usage_sink is given, each call's usage dump is appended in order,
-    so the eval recorder can label initial vs. retry without a second pass."""
+    so the eval recorder can label initial vs. retry without a second pass.
+    Each dump carries elapsed_s: wall time is a call-site fact, and the
+    page-3 trace reads it from here instead of re-timing the call."""
+    start = time.monotonic()
     terms, response = complete_schema(
         working, schema, client=client, prompt_cache_key=EXTRACT_PROMPT_CACHE_KEY
     )
     if usage_sink is not None:
         usage_sink.append(
-            {"model": response.model, **response.usage.as_dict()})
+            {"model": response.model, **response.usage.as_dict(),
+             "elapsed_s": round(time.monotonic() - start, 2)})
     outcomes = ground(terms, source_text)
     attempts = 1
     bad = sorted(
@@ -789,6 +794,7 @@ def _extract_with_retry(
     if bad:
         attempts = 2
         working.append({"role": "user", "content": _retry_feedback(bad)})
+        start = time.monotonic()
         retry_terms, retry_response = complete_schema(
             working, schema,
             client=client, prompt_cache_key=EXTRACT_PROMPT_CACHE_KEY,
@@ -796,7 +802,8 @@ def _extract_with_retry(
         if usage_sink is not None:
             usage_sink.append(
                 {"model": retry_response.model,
-                 **retry_response.usage.as_dict()})
+                 **retry_response.usage.as_dict(),
+                 "elapsed_s": round(time.monotonic() - start, 2)})
         fresh = ground(retry_terms, source_text)
         for name in bad:
             if fresh[name].status in ("grounded", "not_stated"):

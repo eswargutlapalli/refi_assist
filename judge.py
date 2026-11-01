@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import time
+
 from pydantic import ValidationError
 
 from llm import (
@@ -89,13 +91,15 @@ def judge_draft(context: dict[str, Any], *, client: Any = None,
     """Judge one accepted draft. Unknown problem kinds and null fields
     fail loudly: a judge that disobeys its schema is not a pass. When
     usage_sink is given, the call's usage dump is appended."""
+    start = time.monotonic()
     result, response = _judge_call(context, client)
     if usage_sink is not None:
         # Fakes carry no usage object; zeros keep the key shape intact.
         usage = getattr(response, "usage", None)
         counts = (usage.as_dict() if usage is not None
                   else LlmUsage().as_dict())
-        usage_sink.append({"model": response.model, **counts})
+        usage_sink.append({"model": response.model, **counts,
+                           "elapsed_s": round(time.monotonic() - start, 2)})
     if result.passed is None or result.problems is None:
         raise LlmError("JudgeResult: null field in judge reply")
     unknown = [kind for kind in result.problems
