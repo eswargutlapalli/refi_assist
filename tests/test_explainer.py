@@ -315,6 +315,25 @@ def test_prompt_frames_other_side_as_note():
     assert "never use the other option's headline wording" in system
 
 
+def test_prompt_forbids_wait_discussion():
+    # Decision 16: the narrative covers verdict, comparison, and split
+    # only — never wait scenarios, which the page renders separately.
+    explainer = pytest.importorskip("explainer")
+    verify_mod = pytest.importorskip("verify")
+    result, decision = _fixture()
+    messages = explainer.build_explainer_messages(result, decision)
+    system = messages[0]["content"]
+    assert "Don't discuss waiting" in system
+    assert "wait scenarios separately" in system
+    # The ban has teeth: without wait context a wait figure still fails.
+    text = (
+        f"{decision.headline} {decision.tradeoff_note} "
+        "If you wait 6 months, the picture changes."
+    )
+    report = verify_mod.verify_narrative(text, result, decision)
+    assert not report.ok
+
+
 def test_prompt_carries_headline_rates_and_no_interest():
     explainer = pytest.importorskip("explainer")
     result, decision = _fixture()

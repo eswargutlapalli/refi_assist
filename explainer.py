@@ -35,8 +35,8 @@ REASON_MODEL_UNAVAILABLE = "model_unavailable"
 REASON_LIMIT_REACHED = "limit_reached"
 # Model call itself failed (not a bad draft): same template category as
 # STATUS_TEMPLATE for eval counts — both start with "Code-written" — but
-# honest about the cause. NOTE: AGENTS.md rule 3.4 lists exactly three
-# on-screen states; carrying this fourth needs a rule update there.
+# honest about the cause. Rule 3.4 covers both wordings: failed checks get
+# STATUS_TEMPLATE, an unavailable model gets STATUS_UNAVAILABLE.
 STATUS_UNAVAILABLE = "Code-written summary — the model explanation wasn't available."
 # The limit path reuses STATUS_UNAVAILABLE with the app's limit message.
 
@@ -122,6 +122,7 @@ def build_explainer_messages(
             "state the other side the way the tradeoff note does "
             "('but costs $X more in total'); "
             "never use the other option's headline wording; "
+            "Don't discuss waiting; the page shows wait scenarios separately. "
             "use ONLY the figures listed below — every amount as $X.XX, "
             "every month count as digits, no other numbers in any form, no "
             "years, no spelled-out amounts; never invent a figure."
