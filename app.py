@@ -509,10 +509,10 @@ def _apply_upload(state: Any, target: str, applied: str, upload: Any,
 def _page_input(st: Any) -> None:
     """Page 1: statements in — typed, pasted, or uploaded as files."""
     st.header("1 · Enter your statements")
-    st.text_area("Current loan statement", key="loan_text")
-    st.text_area("Refinance offer", key="offer_text")
-    st.write("Or upload them — `.txt`, PDF, or a photo/screenshot — "
-             "the text lands above, editable.")
+    # Uploads are read before the text areas exist: Streamlit forbids
+    # writing a widget key after its widget is instantiated, so the
+    # transcript must land in session state first. The file widgets carry
+    # their own keys and are unaffected.
     for key, label, target, applied in (
         ("up_loan_file", "Upload loan statement", "loan_text", "applied_loan_file"),
         ("up_offer_file", "Upload refinance offer", "offer_text", "applied_offer_file"),
@@ -547,6 +547,10 @@ def _page_input(st: Any) -> None:
                         (".png", ".jpg", ".jpeg")):
                     st.session_state[target + "_image"] = raw
             st.session_state["vision_used"] = budget["used"]
+    st.text_area("Current loan statement", key="loan_text")
+    st.text_area("Refinance offer", key="offer_text")
+    st.write("Or upload them — `.txt`, PDF, or a photo/screenshot — "
+             "the text lands above, editable.")
     for target in ("loan_text", "offer_text"):
         source = st.session_state.get(target + "_source")
         image = st.session_state.get(target + "_image")

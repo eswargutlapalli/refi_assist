@@ -5,7 +5,9 @@ computes; compute needs every confirmed field present; percent-to-decimal
 conversion lives in code; display carries words, never signs.
 """
 
+import ast
 import types
+from pathlib import Path
 
 import pytest
 
@@ -1008,3 +1010,25 @@ def test_parse_side_skips_action_once_cap_reached():
     _parse_side(_St(state), "loan", "loan", LOAN_FIELDS,
                 lambda text: calls.append(text))
     assert calls == []
+
+
+def test_upload_transcripts_land_before_text_areas_exist():
+    # Streamlit forbids writing a widget key after its widget is
+    # instantiated: the upload loop must stage transcripts into
+    # loan_text/offer_text before the text areas are created, or the
+    # page-1 upload path crashes. Pins source order, not behavior.
+    tree = ast.parse((Path(__file__).parent.parent / "app.py").read_text())
+    page_input = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_page_input")
+    uploads, areas = [], []
+    for node in ast.walk(page_input):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == "_apply_upload":
+            uploads.append(node.lineno)
+        if isinstance(func, ast.Attribute) and func.attr == "text_area":
+            areas.append(node.lineno)
+    assert uploads and areas
+    assert max(uploads) < min(areas)
