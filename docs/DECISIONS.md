@@ -77,3 +77,39 @@ Resolved: split order settled by grill decision 12 (rate-first over remaining te
    Effort: extraction runs `minimal` (a copy task); explanation runs `medium` (narrative quality earns the reasoning).
    Reason: the live model needs exact mismatch names to fix its draft in one pass; the eval needs kind-only hints so its checks stay worth measuring.
    Rejected: kind-only live feedback (wastes the single rewrite on guessing); model-worded verdicts; silent fallback.
+
+17. Eval records, never the app (Oct 31): the app never writes user input to disk, so there is no trace recorder in `app.py`. `eval/record.py` runs the live calls — both extractions on the pasted texts, the explainer ladder on the TRUE terms (what a user would confirm) — over scenario files only, saving every reply with its usage dump to a run folder, capped and resumable. Reported numbers always come from a recorded run; hand-written records are scorer unit-test fixtures only.
+   Reason: explanation quality is scored separately from extraction accuracy; extraction errors surface in the extraction metrics and the verdict-flip check.
+   Rejected: an app-side recorder; explaining extracted terms (mixes the two error sources); hand-written reported numbers.
+
+18. Scenario schema + held-out discipline (Oct 31): dev scenarios in `eval/scenarios/` hold loan/offer texts, TRUE terms (`None` for unstated), and a priority; expected engine outputs and the verdict are recomputed from the true terms, never stored. The held-out set lives outside the repo; `record.py` and `score.py` take `--data <path>`, and the agent never opens the held-out path.
+   Reason: hidden-from-model by construction (recompute, not secrecy) while keeping the dev set runnable from a fresh clone.
+   Rejected: stored expected outputs (readable at runtime); a gitignored answers file (fresh clones cannot run the eval).
+
+19. Must-choose financed flag (Oct 31): when fees are stated but the method is not, truth `fees_financed` is `None` and the flag is a field the user must choose — ungrounded counts as missing, grounded either way counts as wrong. Percent-stated penalties (e.g. "2% of the balance") hold the dollar value in truth; the extractor is expected to clear them and the scorer counts the user fix.
+   Reason: a stated-but-unchoosable method is a confirm-gate decision, not an ignorable blank; a percent penalty states a charge the extractor cannot copy as dollars.
+   Rejected: treating must-choose as ignorable `None`; truth `None` for a stated percent penalty (hides the required user math).
+
+20. Eval metrics (Oct 31): per field against the truth — grounded-and-correct over stated fields; wrong-value rate (grounded but unequal, target zero, every case listed); confirmation-edit rate (wrong + cleared + missing over all 8 fields); explanation by `ExplainResult` kind and reason (first-pass verified / rewritten / template); verdict from extracted terms (true filling only empties) vs. from true terms; cached / prompt tokens. Reported as a markdown table (`REPORT.md`) saved next to the run.
+   Reason: each metric answers one borrower-facing question — is it copied right, would I have to fix it, does the story check out, does an error change the answer.
+   Rejected: aggregate-only scores (hide which field failed); storing verdicts (rot when the engine changes).
+
+21. Quote-only attribution (Oct 31): `check_field` decides from the quote alone — quote in source, value among the quote's numbers, unit and field word inside the quote's windows. The source-wide competitor guard is gone: a second stated amount elsewhere no longer vetoes a well-quoted copy ("6.5% APR" grounds with "48" two slots past the %). A misattributed copy is caught downstream by the wrong-value probes, which compare against the truth. Bare amounts still fail ("$150" names nothing for the penalty; bare $ means balance).
+   Reason: the guard punished precise quoting — the better the quote, the more the rest of the text could veto it. The quote is the model's claim about what it copied; judging the claim, not the neighborhood, is the check.
+   Rejected: keeping the source-wide veto (real-world adjacencies like "APR, 48 months" cleared relentlessly); model-side disambiguation (math in the model).
+
+22. Financed flag counts only when fees are above zero (Oct 31): with $0 fees the app never asks, so the scorer excludes the flag (seven evaluated fields, not eight). The must-choose rule (decision 19) is unchanged — stated fees with an unstated method still count the flag as missing/wrong.
+   Reason: scoring a question the borrower is never asked inflates the fix rate for the cleanest cases.
+   Rejected: always counting eight (clean scenarios pay a phantom field).
+
+23. Agreement feedback quotes the sentence (Oct 31): when a narrative fails agreement on an opposing-side phrase, the feedback quotes that sentence ("This sentence states the other option's headline: '<sentence>'. State the tradeoff as the note does instead.") and never says "restate the headline" when the headline is already present. The explainer prompt frames the other side the way the tradeoff note does, never in the other option's headline wording.
+   Reason: the old message told the model to redo what it had already done; the sentence quote points at what to change.
+   Rejected: headline-only feedback on agreement failures.
+
+24. Single-amount quotes claim without a cap (Oct 31): when a quote holds exactly one digit-stated amount, any field word inside the quote may claim it ("Prepayment penalty if you refinance elsewhere: $150" grounds). Word-form lone numbers stay capped, and multi-amount quotes keep the proximity rule.
+   Reason: one amount plus a naming word is a deliberate copy; the cap existed for crowded spans, not for these.
+   Rejected: lifting the cap everywhere (crowded-span attribution still needs distance).
+
+25. Eval reports are committed (Oct 31): per-run `REPORT.md` copies live in `docs/eval/` (synthetic scenarios only); the run folders with full records stay gitignored and reproducible via `record.py`.
+   Reason: the report is the framework's visible output; the records are regenerable bulk.
+   Rejected: committing full run folders; keeping reports local-only.
