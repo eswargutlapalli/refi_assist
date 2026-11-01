@@ -477,6 +477,17 @@ def test_numbers_in_word_forms():
     assert numbers_in("no one here") == [1]
 
 
+def test_numbers_in_point_forms():
+    from extract import numbers_in
+
+    assert numbers_in("four point seven nine") == [pytest.approx(4.79)]
+    assert numbers_in("six point five percent") == [pytest.approx(6.5)]
+    # Malformed forms fail closed: nothing parses, never a wrong number.
+    assert numbers_in("four point twenty") == []
+    assert numbers_in("point five") == []
+    assert numbers_in("point") == []
+
+
 WORDS_SOURCE = (
     "thirteen thousand four hundred and fifty one dollars and 51 cents "
     "with remaining months of thirty seven and an annual interest rate "

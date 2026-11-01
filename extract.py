@@ -107,7 +107,7 @@ _TENS_PAIR = {
 }
 _VOCAB = (
     set(_WORD_VALUES) | set(_SCALES) | _MARKERS
-    | set(_PLURAL_SCALES) | {"tens", "ones"}
+    | set(_PLURAL_SCALES) | {"tens", "ones", "point"}
 )
 
 
@@ -231,10 +231,36 @@ def _scale_value(tokens: list[str]) -> float:
     return total + current
 
 
+def _point_value(run: list[str]) -> float | None:
+    """Strict spoken decimal: whole words, one point, single digits after.
+    Anything else parses to nothing — a guessed fraction is worse than
+    none, since grounding would then bless a number nobody stated."""
+    if run.count("point") != 1:
+        return None
+    cut = run.index("point")
+    whole = [t for t in run[:cut] if t not in _MARKERS]
+    frac = [t for t in run[cut + 1:] if t not in _MARKERS]
+    if not whole or not any(t in _WORD_VALUES or _is_number_token(t) for t in whole):
+        return None
+    digits = []
+    for token in frac:
+        if token in _WORD_VALUES and _WORD_VALUES[token] < 10:
+            digits.append(str(_WORD_VALUES[token]))
+        elif token.isdigit() and len(token) == 1:
+            digits.append(token)
+        else:
+            return None
+    if not digits:
+        return None
+    return _scale_value(whole) + int("".join(digits)) / (10 ** len(digits))
+
+
 def _run_value(run: list[str]) -> float | None:
     # A run with no value token ("and", "percent" alone) states no amount.
     if not any(token in _WORD_VALUES or _is_number_token(token) for token in run):
         return None
+    if "point" in run:
+        return _point_value(run)
     if "dollar" in run or "dollars" in run:
         marker = run.index("dollar") if "dollar" in run else run.index("dollars")
         dollars = _scale_value(run[:marker])

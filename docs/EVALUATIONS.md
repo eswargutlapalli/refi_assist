@@ -83,13 +83,15 @@ value or a flipped verdict.
 Thirteen scenarios, one recording per run, and model output varies
 between runs. These are descriptive counts, not statistical estimates.
 
-Four fixes remain in dev-03. Three are by design. The percent penalty ("2%
-of the balance") cannot be copied as dollars, so the user types 280.0. The
-must-choose flag has stated fees with no stated method, so the user picks.
-"3 years" states no month word, so 36 stays user-entered. The fourth is a
-known parser gap: the spoken-word rate ("four point seven nine") parses to
-no number because the word parser has no "point" support yet. That support
-is planned work, not a scenario fix.
+dev-03 is complete: it counted four fixes. Three are by design. The
+percent penalty ("2% of the balance") cannot be copied as dollars, so the
+user types 280.0. The must-choose flag has stated fees with no stated
+method, so the user picks. "3 years" states no month word, so 36 stays
+user-entered. The fourth was a known parser gap at the time: the
+spoken-word rate ("four point seven nine") parsed to no number for lack
+of "point" support. That support has since landed in the parser (strict
+decimals; malformed forms parse to nothing); past runs are not re-scored,
+and a future run will show whether that fourth fix disappears.
 
 The dev set found and fixed real problems: decisions 21 through 24 came out
 of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out

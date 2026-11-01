@@ -227,6 +227,19 @@ def test_scenario_rate_passes_with_rates():
     assert report.ok, report.feedback
 
 
+def test_spelled_out_decimal_rate_passes():
+    # Shared parser: a word-form decimal rate cites exactly like digits.
+    verify = pytest.importorskip("verify")
+    result, decision = _fixture()
+    text = (
+        f"{decision.headline} {decision.tradeoff_note} "
+        "Your nine percent APR drops to four point five percent."
+    )
+    report = verify.verify_narrative(
+        text, result, decision, rates_pct=(9.0, 4.5))
+    assert report.ok, report.feedback
+
+
 def test_invented_rate_fails():
     verify = pytest.importorskip("verify")
     result, decision = _fixture()
