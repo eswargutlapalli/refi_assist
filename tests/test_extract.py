@@ -192,19 +192,27 @@ def test_cents_phrase_suppresses_raw_digits():
     assert check_field(51.0, "Fee $51", "Fee $51", field="fees") is True
 
 
-def test_competing_amount_in_source_clears():
-    # Both statements pasted in one box: two rates each attribute to the
-    # field, so neither copy is trustworthy — the user must pick.
+def test_shared_source_grounds_each_quote():
+    # Quote-only attribution: each quote names its term and states its
+    # amount with its unit, so each grounds against the shared source. A
+    # second stated amount elsewhere no longer vetoes the copy; a
+    # misattributed copy is caught downstream by the wrong-value probes.
     source = ("Balance of 68713.23 with rate at 6.29% and remaining 45 months. "
               "Rate 5.99% with 48 months to maturity.")
-    assert check_field(5.99, "Rate 5.99%", source, field="annual_rate_pct") is False
-    assert check_field(6.29, "rate at 6.29%", source, field="annual_rate_pct") is False
-    # Separated, each grounds: the rule only fires on genuine competition.
+    assert check_field(5.99, "Rate 5.99%", source, field="annual_rate_pct") is True
+    assert check_field(6.29, "rate at 6.29%", source, field="annual_rate_pct") is True
+    # Separated, each still grounds.
     assert check_field(6.29, "rate at 6.29%",
                        "Balance of 68713.23 with rate at 6.29%.",
                        field="annual_rate_pct") is True
     assert check_field(5.99, "Rate 5.99%", "Rate 5.99% with 48 months to maturity.",
                        field="annual_rate_pct") is True
+    # "%" both states the unit and names the term for rates, so a bare
+    # "5.99%" grounds; a bare "$150" names nothing (bare $ means balance)
+    # and still fails for the penalty.
+    assert check_field(5.99, "5.99%", source, field="annual_rate_pct") is True
+    assert check_field(150.0, "$150", "Penalty $150",
+                       field="prepayment_penalty") is False
 
 
 def test_digit_before_scale_word_belongs_to_that_amount():
@@ -301,6 +309,19 @@ def test_crossed_penalty_balance_quotes():
                        field="prepayment_penalty") is True
 
 
+def test_single_amount_quote_claims_distant_field_word():
+    # One amount, digit-stated: any field word in the quote may claim it,
+    # with no distance cap. The long penalty phrasing grounds at last.
+    quote = "Prepayment penalty if you refinance elsewhere: $150"
+    assert check_field(150.0, quote, quote,
+                       field="prepayment_penalty") is True
+    # Multi-amount quotes keep the proximity rule: with two copies the
+    # nearer word still decides.
+    assert check_field(17327.0, "balance $17,327, prepayment penalty $200",
+                       "balance $17,327, prepayment penalty $200",
+                       field="prepayment_penalty") is False
+
+
 def test_fee_context_rejects_balance():
     assert check_field(250.0, "$250 in fees", "$250 in fees",
                        field="balance") is False
@@ -376,9 +397,13 @@ def test_window_measured_from_run_edges():
     assert check_field(13451.0, quote, quote, field="balance") is True
 
 
-def test_percent_punctuates_only_what_precedes_it():
-    # On the shared sentence the % belongs to 7.5, one slot before 36:
-    # proximity must not let the rate claim another field's number.
+def test_quote_local_attribution_decides():
+    # Attribution reads the quote only, inside a 3-token cap: in the full
+    # sentence "APR" sits four tokens from 36, so 36 is nobody's rate even
+    # though the % reaches it. A tighter quote ("36 payments") claims it
+    # for months instead — the model picks which copy it means by what it
+    # quotes. Regression case: the near-tie offer rate grounds from its
+    # own quote despite the "48" sitting two slots past the %.
     quote = "Balance $20,000. APR 7.5%. 36 payments remaining."
     assert check_field(36.0, quote, quote,
                        whole=True, field="annual_rate_pct") is False
@@ -386,6 +411,9 @@ def test_percent_punctuates_only_what_precedes_it():
                        field="annual_rate_pct") is True
     assert check_field(36.0, "36 payments", quote,
                        whole=True, field="remaining_months") is True
+    offer = "Refinance offer: 6.5% APR, 48 months, $150 fee due at signing."
+    assert check_field(6.5, "6.5% APR", offer,
+                       field="annual_rate_pct") is True
 
 
 def test_mos_counts_as_months():

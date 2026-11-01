@@ -498,6 +498,16 @@ def _unit_ok(field: str, strs: list[str], occ: _Occ) -> bool:
     )
 
 
+def _span_has_digit(toks: list[tuple[str, int, int]], occ: _Occ) -> bool:
+    """True when the matched occurrence is digit-stated. Word-form runs
+    ("one", "a") parse as amounts too, but a far field word must not
+    claim through them."""
+    return any(
+        re.search(r"\d", toks[k][0]) is not None
+        for k in range(occ.start, occ.end)
+    )
+
+
 def _binds(occ: _Occ, others: list[_Occ], index: int) -> bool:
     """A field word at index counts for occ unless another stated amount sits
     strictly between them ("% in 7.9% belongs to 7.9, not to a $17,327 three
@@ -536,6 +546,18 @@ def _attribute(
                     winners.add(name)
     if winners:
         return winners
+    if len({o.value for o in all_occs}) == 1 and _span_has_digit(toks, occ):
+        # One digit-stated amount: any field word inside the quote may
+        # claim it, with no distance cap ("Prepayment penalty if you
+        # refinance elsewhere: $150"). Word-form lone numbers ("one")
+        # stay capped — articles parse as amounts, deliberate copies do
+        # not hide behind them.
+        named = {
+            name for name in _ALL_FIELDS
+            if any(_is_field_word(name, tok) for tok in strs)
+        }
+        if named:
+            return named
     span = strs[occ.start:occ.end]
     if any(tok in ("dollar", "dollars") for tok in span) or _dollar_adjacent(
         quote, toks, occ
@@ -579,11 +601,13 @@ def check_field(
     toks = _tokenize(quote)
     strs = [tok for tok, _, _ in toks]
     if not numbers_in(quote):
+        # Quote-only attribution: a digit-free quote grounds a zero when
+        # it names the term. No source-wide competitor scan: a
+        # misattributed copy is caught downstream by the wrong-value probes.
         return (
             value == 0
             and _has_zero_word(strs, quote)
             and any(_is_field_word(field, tok) for tok in strs)
-            and not _has_competitor(field, 0.0, source)
         )
     _, all_occs = _occurrences(quote)
     occs = [
@@ -592,24 +616,6 @@ def check_field(
     for occ in occs:
         if _unit_ok(field, strs, occ) and field in _attribute(
             strs, toks, quote, occ, all_occs
-        ):
-            return not _has_competitor(field, value, source)
-    return False
-
-
-def _has_competitor(field: str, value: float, source: str) -> bool:
-    """A distinct stated amount in the source that also attributes to the
-    field: two copies, no trustworthy pick. Both statements pasted in one
-    box grounds neither rate — the borrower picks. Equal amounts (digit
-    and word runs of one number) never compete."""
-    src_toks = _tokenize(source)
-    src_strs = [tok for tok, _, _ in src_toks]
-    _, src_occs = _occurrences(source)
-    for occ in src_occs:
-        if math.isclose(occ.value, value, rel_tol=1e-9):
-            continue
-        if _unit_ok(field, src_strs, occ) and field in _attribute(
-            src_strs, src_toks, source, occ, src_occs
         ):
             return True
     return False
@@ -735,13 +741,19 @@ def _extract_with_retry(
     source_text: str,
     ground: Any,
     client: Any,
+    usage_sink: list[dict[str, Any]] | None = None,
 ) -> ExtractionResult:
     """Shared one-retry loop: ground, re-ask the stated-but-ungrounded fields
     once with kind-only feedback, then clear what still fails. Round-one
-    grounded fields stand; not_stated fields (null/null) are never re-asked."""
-    terms, _ = complete_schema(
+    grounded fields stand; not_stated fields (null/null) are never re-asked.
+    When usage_sink is given, each call's usage dump is appended in order,
+    so the eval recorder can label initial vs. retry without a second pass."""
+    terms, response = complete_schema(
         working, schema, client=client, prompt_cache_key=EXTRACT_PROMPT_CACHE_KEY
     )
+    if usage_sink is not None:
+        usage_sink.append(
+            {"model": response.model, **response.usage.as_dict()})
     outcomes = ground(terms, source_text)
     attempts = 1
     bad = sorted(
@@ -751,10 +763,14 @@ def _extract_with_retry(
     if bad:
         attempts = 2
         working.append({"role": "user", "content": _retry_feedback(bad)})
-        retry_terms, _ = complete_schema(
+        retry_terms, retry_response = complete_schema(
             working, schema,
             client=client, prompt_cache_key=EXTRACT_PROMPT_CACHE_KEY,
         )
+        if usage_sink is not None:
+            usage_sink.append(
+                {"model": retry_response.model,
+                 **retry_response.usage.as_dict()})
         fresh = ground(retry_terms, source_text)
         for name in bad:
             if fresh[name].status in ("grounded", "not_stated"):
@@ -774,7 +790,8 @@ def _checked_source(source_text: str) -> str:
 
 
 def extract_current_loan(
-    source_text: str, *, client: Any = None
+    source_text: str, *, client: Any = None,
+    usage_sink: list[dict[str, Any]] | None = None,
 ) -> ExtractionResult:
     """Extract current-loan terms from borrower text with grounding proof.
 
@@ -785,17 +802,18 @@ def extract_current_loan(
     source = _checked_source(source_text)
     return _extract_with_retry(
         CurrentLoanTerms, _extraction_messages(source, _LOAN_EXTRA),
-        source, _ground_all, client,
+        source, _ground_all, client, usage_sink,
     )
 
 
 def extract_refinance_offer(
-    source_text: str, *, client: Any = None
+    source_text: str, *, client: Any = None,
+    usage_sink: list[dict[str, Any]] | None = None,
 ) -> ExtractionResult:
     """Extract refinance-offer terms: same proof, same single retry, same
     clearing. Convert with to_refinance_offer()."""
     source = _checked_source(source_text)
     return _extract_with_retry(
         RefinanceOfferTerms, _extraction_messages(source, _OFFER_EXTRA),
-        source, _ground_offer, client,
+        source, _ground_offer, client, usage_sink,
     )
