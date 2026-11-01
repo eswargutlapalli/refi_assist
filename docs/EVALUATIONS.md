@@ -80,6 +80,30 @@ leniency (decision 24) plus sentence-quoting agreement feedback (decision
 23). The long penalty quote grounded live. No run ever produced a wrong
 value or a flipped verdict.
 
+## 5. Claim-judge fixtures (Nov 1, decision 26)
+
+Twelve fixed drafts in `tests/fixtures/judge_drafts.json` (invented text
+only): 6 clean, 6 known-bad across softening, contradiction, wrong
+attribution, and advice beyond the verdict. Judged once live on Baseten
+(`meta-models/muse-spark-open-1026`), re-runnable via
+`python3 judge.py --fixtures tests/fixtures/judge_drafts.json`:
+
+- catches: 6/6, each with exactly the expected problem kind;
+- false flags on clean drafts: 0/6;
+- transport/schema errors: 0.
+
+These fixtures were written alongside the judge prompt, so these are dev
+results: the prompt author knew every draft's trick. A held-out judge
+line (fresh drafts the prompt never saw) gets its own row here:
+
+| Judge set | Catches | False flags | Errors |
+|---|---|---|---|
+| dev fixtures (12) | 6/6 | 0/6 | 0 |
+| held-out drafts | — | — | — |
+
+Descriptive counts, not estimates — and the judge stays meaning-only.
+Number verification is unchanged and still runs first.
+
 Thirteen scenarios, one recording per run, and model output varies
 between runs. These are descriptive counts, not statistical estimates.
 
@@ -98,15 +122,13 @@ of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out
 set was written separately and never seen during development. It runs once
 at the freeze and gets its own column.
 
-## 5. What the eval does not cover
+## 6. What the eval does not cover
 
 Hedging or softening the verdict passes the word-list check; catching it is
-Stage-3 claim-judge work on Muse Spark Open via Baseten. Right number, wrong
-meaning passes too: a sentence like "the lower rate saves" followed by a term
-figure uses verified numbers to state a false attribution, also for the
-Stage-3 judge. Statement photos, screenshots, and PDFs are not yet evaluated;
-text only. No fine-tuning signal exists yet; the Fireworks experiment waits
-on the core build.
+the claim judge's job (§5 above), live on Muse Spark Open via Baseten, as is
+right number with wrong meaning. Statement photos, screenshots, and PDFs are
+not yet evaluated; text only. No fine-tuning signal exists yet; the Fireworks
+experiment waits on the core build.
 
 ## 6. Reproduce it
 

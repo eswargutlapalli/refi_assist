@@ -113,3 +113,7 @@ Resolved: split order settled by grill decision 12 (rate-first over remaining te
 25. Eval reports are committed (Oct 31): per-run `REPORT.md` copies live in `docs/eval/` (synthetic scenarios only); the run folders with full records stay gitignored and reproducible via `record.py`.
    Reason: the report is the framework's visible output; the records are regenerable bulk.
    Rejected: committing full run folders; keeping reports local-only.
+
+26. Claim-judge failure behavior (Nov 1): the Baseten judge call has a 20-second timeout with no retries. A meaning failure falls back to the code-written template with "Code-written template — the model narrative did not pass the meaning check." A judge timeout or error falls back to the template with "Code-written template — the independent check was unavailable." Both count as template in eval. The judge sees the accepted draft only — first-pass or rewritten, exactly once — never a number-failed draft and never the template. Judge calls do not count against the 5-run narrator budget.
+   Reason: 20 seconds is 3x the observed ~6s call, bounded so one slow call never hangs page 3; distinct wordings keep the failure honest under rule 3.4; judging only accepted drafts leaves no softening hole without re-checking known-bad text; the judge is a checker like `verify.py`, not a narrative.
+   Rejected: 30s/60s timeouts; reusing the existing template wordings; judging first-pass drafts only; counting judge calls against the narrator budget.
