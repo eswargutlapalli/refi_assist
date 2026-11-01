@@ -1,0 +1,170 @@
+[
+  {
+    "id": "clean-keep-total",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Keeping your loan costs $1,225.09 less in total.",
+    "tradeoff_note": "Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Your current loan pays off 36 months sooner.",
+    "figures": [
+      "Lower rate: saves $2,100.00.",
+      "Longer term: costs $2,900.00.",
+      "Fees and charges: cost $425.09.",
+      "Breakeven: month 41."
+    ],
+    "draft": "Keeping your loan costs $1,225.09 less in total. Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Your current loan pays off 36 months sooner. The lower rate saves $2,100.00, while the longer term costs $2,900.00 and fees and charges cost $425.09, with breakeven at month 41."
+  },
+  {
+    "id": "clean-refinance-payment",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Refinancing lowers your payment by $88.40 a month.",
+    "tradeoff_note": "Refinancing lowers your payment by $88.40 a month, but costs $640.20 more in total. Refinancing pays off 12 months later.",
+    "figures": [
+      "Lower rate: saves $900.00.",
+      "Longer term: costs $1,300.00.",
+      "Fees and charges: cost $240.20.",
+      "Breakeven: month 8."
+    ],
+    "draft": "Refinancing lowers your payment by $88.40 a month. Refinancing lowers your payment by $88.40 a month, but costs $640.20 more in total. The lower rate saves $900.00, the longer term costs $1,300.00, and fees and charges cost $240.20, with breakeven at month 8."
+  },
+  {
+    "id": "clean-too-close",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Too close to call on total cost — $42.10 apart.",
+    "tradeoff_note": "Refinancing lowers your payment by $12.00 a month, but costs $42.10 more in total. Refinancing pays off 6 months later.",
+    "figures": [
+      "Lower rate: saves $300.00.",
+      "Longer term: costs $300.00.",
+      "Fees and charges: cost $42.10.",
+      "Breakeven: month 30."
+    ],
+    "draft": "Too close to call on total cost — $42.10 apart. Refinancing lowers your payment by $12.00 a month, but costs $42.10 more in total. The lower rate saves $300.00, the longer term costs $300.00, and fees and charges cost $42.10, with breakeven at month 30."
+  },
+  {
+    "id": "clean-keep-payoff",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Your current loan pays off first — 18 months sooner.",
+    "tradeoff_note": "Your payment stays $50.00 a month higher, but you pay $700.00 less in total. Your current loan pays off 18 months sooner.",
+    "figures": [
+      "Higher rate: costs $200.00.",
+      "Shorter term: saves $800.00.",
+      "Fees and charges: cost $100.00.",
+      "Breakeven: refinancing never stays ahead within the horizon."
+    ],
+    "draft": "Your current loan pays off first — 18 months sooner. Your payment stays $50.00 a month higher, but you pay $700.00 less in total. The higher rate costs $200.00, the shorter term saves $800.00, and fees and charges cost $100.00."
+  },
+  {
+    "id": "clean-refinance-total",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Refinancing saves you $1,540.00 in total.",
+    "tradeoff_note": "Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. Refinancing pays off 6 months sooner.",
+    "figures": [
+      "Lower rate: saves $1,800.00.",
+      "Shorter term: saves $40.00.",
+      "Fees and charges: cost $300.00.",
+      "Breakeven: month 1."
+    ],
+    "draft": "Refinancing saves you $1,540.00 in total. Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. The lower rate saves $1,800.00, the shorter term saves $40.00, and fees and charges cost $300.00, with breakeven at month 1."
+  },
+  {
+    "id": "clean-keep-mentions-wait-table",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Keeping your loan costs $900.00 less in total.",
+    "tradeoff_note": "Your payment stays $100.00 a month higher, but you pay $900.00 less in total. Your current loan pays off 12 months sooner.",
+    "figures": [
+      "Lower rate: saves $500.00.",
+      "Longer term: costs $1,200.00.",
+      "Fees and charges: cost $200.00.",
+      "Breakeven: month 20."
+    ],
+    "draft": "Keeping your loan costs $900.00 less in total. Your payment stays $100.00 a month higher, but you pay $900.00 less in total. The lower rate saves $500.00, the longer term costs $1,200.00, and fees and charges cost $200.00, with breakeven at month 20."
+  },
+  {
+    "id": "bad-softening-keep",
+    "expected_passed": false,
+    "expected_problems": ["softening"],
+    "headline": "Keeping your loan costs $1,225.09 less in total.",
+    "tradeoff_note": "Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Your current loan pays off 36 months sooner.",
+    "figures": [
+      "Lower rate: saves $2,100.00.",
+      "Longer term: costs $2,900.00.",
+      "Fees and charges: cost $425.09.",
+      "Breakeven: month 41."
+    ],
+    "draft": "Keeping your loan costs $1,225.09 less in total. Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Still, you might consider refinancing anyway for the lower monthly payment of $214.56 a month."
+  },
+  {
+    "id": "bad-contradiction",
+    "expected_passed": false,
+    "expected_problems": ["contradiction"],
+    "headline": "Keeping your loan costs $900.00 less in total.",
+    "tradeoff_note": "Your payment stays $100.00 a month higher, but you pay $900.00 less in total. Your current loan pays off 12 months sooner.",
+    "figures": [
+      "Lower rate: saves $500.00.",
+      "Longer term: costs $1,200.00.",
+      "Fees and charges: cost $200.00.",
+      "Breakeven: month 20."
+    ],
+    "draft": "Keeping your loan costs $900.00 less in total. Your payment stays $100.00 a month higher, but you pay $900.00 less in total. Refinancing is the better choice because the lower payment matters more."
+  },
+  {
+    "id": "bad-wrong-attribution",
+    "expected_passed": false,
+    "expected_problems": ["wrong_attribution"],
+    "headline": "Refinancing saves you $1,540.00 in total.",
+    "tradeoff_note": "Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. Refinancing pays off 6 months sooner.",
+    "figures": [
+      "Lower rate: saves $1,800.00.",
+      "Shorter term: saves $40.00.",
+      "Fees and charges: cost $300.00.",
+      "Breakeven: month 1."
+    ],
+    "draft": "Refinancing saves you $1,540.00 in total. Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. The lower rate saves $40.00, which is why refinancing wins."
+  },
+  {
+    "id": "bad-wrong-attribution-keep",
+    "expected_passed": false,
+    "expected_problems": ["wrong_attribution"],
+    "headline": "Keeping your loan costs $1,225.09 less in total.",
+    "tradeoff_note": "Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. Your current loan pays off 36 months sooner.",
+    "figures": [
+      "Lower rate: saves $2,100.00.",
+      "Longer term: costs $2,900.00.",
+      "Fees and charges: cost $425.09.",
+      "Breakeven: month 41."
+    ],
+    "draft": "Keeping your loan costs $1,225.09 less in total. Your payment stays $214.56 a month higher, but you pay $1,225.09 less in total. The lower rate saves $2,900.00, which outweighs everything else."
+  },
+  {
+    "id": "bad-advice-invest",
+    "expected_passed": false,
+    "expected_problems": ["advice_beyond_verdict"],
+    "headline": "Refinancing saves you $1,540.00 in total.",
+    "tradeoff_note": "Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. Refinancing pays off 6 months sooner.",
+    "figures": [
+      "Lower rate: saves $1,800.00.",
+      "Shorter term: saves $40.00.",
+      "Fees and charges: cost $300.00.",
+      "Breakeven: month 1."
+    ],
+    "draft": "Refinancing saves you $1,540.00 in total. Refinancing lowers your payment by $60.00 a month, and costs $1,540.00 less in total. You should invest the $60.00 monthly savings in an index fund for the best return."
+  },
+  {
+    "id": "bad-advice-negotiate",
+    "expected_passed": false,
+    "expected_problems": ["advice_beyond_verdict"],
+    "headline": "Keeping your loan costs $900.00 less in total.",
+    "tradeoff_note": "Your payment stays $100.00 a month higher, but you pay $900.00 less in total. Your current loan pays off 12 months sooner.",
+    "figures": [
+      "Lower rate: saves $500.00.",
+      "Longer term: costs $1,200.00.",
+      "Fees and charges: cost $200.00.",
+      "Breakeven: month 20."
+    ],
+    "draft": "Keeping your loan costs $900.00 less in total. Your payment stays $100.00 a month higher, but you pay $900.00 less in total. Call your lender and demand a rate reduction before doing anything else."
+  }
+]

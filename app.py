@@ -56,18 +56,21 @@ OFFER_FIELDS = ("annual_rate_pct", "term_months", "fees", "fees_financed")
 
 
 def _apply_deploy_secret(st: Any) -> None:
-    """Copy the deploy secret into the environment when it is missing there.
+    """Copy the deploy secrets into the environment when missing there.
 
-    The key comes from the environment; on a hosted deploy there is no
-    shell to export it from, so Streamlit secrets fill the gap instead.
+    The keys come from the environment; on a hosted deploy there is no
+    shell to export them from, so Streamlit secrets fill the gap instead.
     An exported key always wins, and no secrets file means no-op (local
-    runs export the key themselves)."""
-    try:
-        secret = st.secrets["MODEL_API_KEY"]
-    except Exception:
-        return  # no secrets configured — local run, nothing to copy
-    if secret:
-        os.environ.setdefault("MODEL_API_KEY", secret)
+    runs export the keys themselves). Secret names equal the variable
+    names: MODEL_API_KEY and BASETEN_API_KEY.
+    """
+    for name in ("MODEL_API_KEY", "BASETEN_API_KEY"):
+        try:
+            secret = st.secrets[name]
+        except Exception:
+            continue  # this key not configured — try the next
+        if secret:
+            os.environ.setdefault(name, secret)
 
 
 def format_money(value: float) -> str:

@@ -423,11 +423,33 @@ def test_tool_loop_max_turns_cap_counts_arg_errors(monkeypatch):
 
 def test_stage_stubs_raise_not_implemented():
     with pytest.raises(NotImplementedError):
-        llm.baseten_judge("anything")
-    with pytest.raises(NotImplementedError):
         llm.modal_run_suite("anything")
     with pytest.raises(NotImplementedError):
         llm.fireworks_finetune_job("anything")
+
+
+def test_baseten_judge_missing_key_before_network(monkeypatch):
+    monkeypatch.delenv("BASETEN_API_KEY", raising=False)
+    with pytest.raises(LlmAuthError):
+        llm.get_baseten_client()
+    with pytest.raises(LlmAuthError):
+        llm.baseten_judge(MSGS, client=None)
+
+
+def test_baseten_judge_uses_judge_model_and_no_retries():
+    import openai
+
+    fake = _FakeClient(
+        [openai.APITimeoutError(types.SimpleNamespace()), _ok("{}")])
+    with pytest.raises(LlmTransientError):
+        llm.baseten_judge(MSGS, client=fake)
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["model"] == llm.BASETEN_JUDGE_MODEL
+
+
+def test_baseten_client_timeout_is_twenty_seconds(monkeypatch):
+    monkeypatch.setenv("BASETEN_API_KEY", SENTINEL_KEY)
+    assert llm.get_baseten_client().timeout == llm.JUDGE_TIMEOUT_SECONDS == 20.0
 
 
 def test_caller_effort_reaches_the_api():

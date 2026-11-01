@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from engine import Comparison, Verdict, WaitComparison
+from judge import judge_draft
 from llm import EXPLANATION_EFFORT, LlmError, complete
 from verify import (
     _money,
@@ -33,6 +34,10 @@ STATUS_TEMPLATE = "Code-written template — the model narrative did not pass ve
 REASON_FAILED_CHECKS = "failed_checks"
 REASON_MODEL_UNAVAILABLE = "model_unavailable"
 REASON_LIMIT_REACHED = "limit_reached"
+REASON_MEANING_FAILED = "failed_meaning_check"
+REASON_JUDGE_DOWN = "judge_unavailable"
+STATUS_MEANING = "Code-written template — the model narrative did not pass the meaning check."
+STATUS_JUDGE_DOWN = "Code-written template — the independent check was unavailable."
 # Model call itself failed (not a bad draft): same template category as
 # STATUS_TEMPLATE for eval counts — both start with "Code-written" — but
 # honest about the cause. Rule 3.4 covers both wordings: failed checks get
@@ -68,18 +73,21 @@ def display_status(kind: str, reason: str | None) -> str:
         return STATUS_TEMPLATE
     if kind == "template" and reason == REASON_MODEL_UNAVAILABLE:
         return STATUS_UNAVAILABLE
+    if kind == "template" and reason == REASON_MEANING_FAILED:
+        return STATUS_MEANING
+    if kind == "template" and reason == REASON_JUDGE_DOWN:
+        return STATUS_JUDGE_DOWN
     raise ValueError(f"unknown explainer kind/reason: {kind!r}/{reason!r}")
 
 
-def build_explainer_messages(
+def explainer_figures(
     result: Comparison,
-    decision: Verdict,
     rates_pct: tuple[float, ...] = (),
     wait: WaitComparison | None = None,
-) -> list[dict[str, Any]]:
-    """Prompt for one verdict narration. The model gets the headline to quote
-    and every figure it may cite — it already holds all allowed values, so
-    listing them leaks nothing and leaves invention with no excuse."""
+) -> list[str]:
+    """The labeled figures the narrator may cite. One source: the prompt
+    and the claim judge read the same list, so the judge cannot flag a
+    figure the model was told it could use."""
     # Directional, labeled figures only — the shared split_rows wording,
     # never unsigned effects the model could misread the sign of.
     figures = list(split_rows(result))
@@ -114,6 +122,19 @@ def build_explainer_messages(
             f"{_money(wait.plan.monthly)} a month, "
             f"{_money(wait.plan.total)} in total."
         )
+    return figures
+
+
+def build_explainer_messages(
+    result: Comparison,
+    decision: Verdict,
+    rates_pct: tuple[float, ...] = (),
+    wait: WaitComparison | None = None,
+) -> list[dict[str, Any]]:
+    """Prompt for one verdict narration. The model gets the headline to quote
+    and every figure it may cite — it already holds all allowed values, so
+    listing them leaks nothing and leaves invention with no excuse."""
+    figures = explainer_figures(result, rates_pct, wait)
     return [
         {"role": "system", "content": (
             "Explain a loan-comparison verdict in plain language in 3-5 "
@@ -161,15 +182,23 @@ def explain_verdict(
     wait: WaitComparison | None = None,
     client: Any = None,
     on_draft: Any = None,
+    judge_client: Any = None,
+    judge_usage_sink: list[dict[str, Any]] | None = None,
 ) -> ExplainResult:
     """Draft, verify, once rewrite with the bad numbers named, else template.
 
-    At most two model calls: the draft and at most one rewrite. Anything
+    At most two narrator calls: the draft and at most one rewrite. Anything
     still failing falls back to the code-written template, which passes by
     construction — the user never sees an unverified number. When on_draft
     is given, it is called after each draft's check as
     on_draft(attempt, text, report, usage) — the eval recorder uses it to
     save both drafts, never to change the ladder.
+
+    The accepted draft — first-pass or rewritten, exactly once — then faces
+    the claim judge (decision 26), a different model that checks meaning
+    only. A failed meaning falls back to the template; a judge timeout or
+    error falls back to the template with the unavailable wording. Judge
+    calls never count against the narrator budget.
     """
     def done(text: str, kind: str, attempts: int,
              reason: str | None = None) -> ExplainResult:
@@ -184,6 +213,26 @@ def explain_verdict(
             on_draft(attempt, text, checked, sink[0])
         return text, checked, sink[0]
 
+    def judged(text: str, kind: str, attempts: int) -> ExplainResult:
+        # Meaning check on the accepted draft only — never a number-failed
+        # draft, never the template. Failures fall back; they never retry.
+        try:
+            found = judge_draft(
+                {"headline": decision.headline,
+                 "tradeoff_note": decision.tradeoff_note,
+                 "figures": explainer_figures(result, rates_pct, wait),
+                 "draft": text},
+                client=judge_client,
+                usage_sink=judge_usage_sink,
+            )
+        except LlmError:
+            return done(build_template(result, decision), "template",
+                        attempts, REASON_JUDGE_DOWN)
+        if not found.passed:
+            return done(build_template(result, decision), "template",
+                        attempts, REASON_MEANING_FAILED)
+        return done(text, kind, attempts)
+
     messages = build_explainer_messages(result, decision, rates_pct, wait)
     try:
         draft, report, _ = once(messages, 1)
@@ -192,7 +241,7 @@ def explain_verdict(
         return done(build_template(result, decision), "template", 0,
                     REASON_MODEL_UNAVAILABLE)
     if report.ok:
-        return done(draft, "verified", 1)
+        return judged(draft, "verified", 1)
     retry = messages + [
         {"role": "assistant", "content": draft},
         {"role": "user", "content": (
@@ -205,6 +254,6 @@ def explain_verdict(
         return done(build_template(result, decision), "template", 1,
                     REASON_MODEL_UNAVAILABLE)
     if second_report.ok:
-        return done(second, "rewritten", 2)
+        return judged(second, "rewritten", 2)
     return done(build_template(result, decision), "template", 2,
                 REASON_FAILED_CHECKS)

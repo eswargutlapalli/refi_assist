@@ -33,11 +33,14 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 META_BASE_URL = "https://api.meta.ai/v1"
+BASETEN_BASE_URL = "https://inference.baseten.co/v1"
 DEFAULT_MODEL = "muse-spark-1.3"  # Standard mode only; never a -contributor ID.
 DEFAULT_EFFORT = "minimal"  # Extraction and orchestration stay cheap.
 EXPLANATION_EFFORT = "medium"  # Narratives earn reasoning: pass as effort= for the explainer. Raise to "high" if narratives read thin.
 DEFAULT_PROMPT_CACHE_KEY = "refi-assistant-v1"  # Stable key: same value, same prefix, real cache hits.
 BASETEN_JUDGE_MODEL = "meta-models/muse-spark-open-1026"
+JUDGE_PROMPT_CACHE_KEY = "refi-judge-v1"  # Own key: stable per slice.
+JUDGE_TIMEOUT_SECONDS = 20.0  # Decision 26: one slow call never hangs page 3.
 
 MAX_429_RETRIES = 3
 MAX_TOOL_TURNS = 8
@@ -483,11 +486,44 @@ def complete_with_tools(
     raise LlmError(f"Tool loop did not finish within {max_turns} turns.")
 
 
-def baseten_judge(*args: Any, **kwargs: Any) -> LlmResponse:
-    """Stage 3: claim judge on Muse Spark Open via Baseten. Not wired yet."""
-    raise NotImplementedError(
-        "Baseten judge path is not wired yet "
-        f"(model would be {BASETEN_JUDGE_MODEL}); see plan Stage 3."
+def get_baseten_client() -> OpenAI:
+    """Build a Baseten client for the claim judge. Same explicit-key rule
+    as the Meta client: read at call time so rotation and test patching work."""
+    key = os.environ.get("BASETEN_API_KEY", "")
+    if not key:
+        raise LlmAuthError("BASETEN_API_KEY is not set; export it before calling the judge.")
+    return OpenAI(
+        base_url=BASETEN_BASE_URL,
+        api_key=key,
+        timeout=JUDGE_TIMEOUT_SECONDS,
+        # Decision 26: no retries — one slow or failed call falls back.
+        max_retries=0,
+    )
+
+
+def baseten_judge(
+    messages: list[dict[str, Any]],
+    *,
+    response_format: dict[str, Any] | None = None,
+    effort: str = DEFAULT_EFFORT,
+    client: Any = None,
+) -> LlmResponse:
+    """One schema-constrained judge turn on Muse Spark Open via Baseten.
+
+    A different model than the narrator judges the narrative. 20-second
+    timeout with no retries (decision 26): slowness or failure raises and
+    the ladder falls back to the honest template.
+    """
+    if client is None:
+        client = get_baseten_client()
+    return complete(
+        messages,
+        model=BASETEN_JUDGE_MODEL,
+        effort=effort,
+        prompt_cache_key=JUDGE_PROMPT_CACHE_KEY,
+        response_format=response_format,
+        client=client,
+        max_retries=0,
     )
 
 

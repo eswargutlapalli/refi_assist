@@ -92,6 +92,93 @@ def test_two_bad_drafts_fall_back_to_template():
     assert report.ok, report.feedback
 
 
+def _judge_pass_payload():
+    return '{"passed": true, "problems": []}'
+
+
+class _JudgeCompletions:
+    """Fake Baseten transport: scripted JSON replies, usage-free."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if not self.script:
+            raise AssertionError("more judge calls than scripted")
+        item = self.script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        message = types.SimpleNamespace(content=item, tool_calls=None)
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=message)],
+            usage=None,
+            model="meta-models/muse-spark-open-1026",
+        )
+
+
+class _JudgeClient:
+    def __init__(self, script):
+        self.chat = types.SimpleNamespace(completions=_JudgeCompletions(script))
+
+    @property
+    def calls(self):
+        return self.chat.completions.calls
+
+
+def test_meaning_failure_falls_back_to_template():
+    explainer = pytest.importorskip("explainer")
+    result, decision = _fixture()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    fake = _FakeClient([draft])
+    judge_client = _JudgeClient(
+        ['{"passed": false, "problems": ["softening"]}'])
+    out = explainer.explain_verdict(
+        result, decision, client=fake, judge_client=judge_client)
+    assert (out.kind, out.reason) == ("template", "failed_meaning_check")
+    assert out.status == explainer.STATUS_MEANING
+    assert decision.headline in out.text
+
+
+def test_judge_error_falls_back_to_unavailable_template():
+    explainer = pytest.importorskip("explainer")
+    from llm import LlmTransientError
+    result, decision = _fixture()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    fake = _FakeClient([draft])
+    judge_client = _JudgeClient([LlmTransientError("LlmTransientError: boom")])
+    out = explainer.explain_verdict(
+        result, decision, client=fake, judge_client=judge_client)
+    assert (out.kind, out.reason) == ("template", "judge_unavailable")
+    assert out.status == explainer.STATUS_JUDGE_DOWN
+
+
+def test_judge_runs_on_rewritten_draft_too():
+    explainer = pytest.importorskip("explainer")
+    result, decision = _fixture()
+    bad = f"{decision.headline} {decision.tradeoff_note} Bonus $9,999.99."
+    good = f"{decision.headline} {decision.tradeoff_note}"
+    fake = _FakeClient([bad, good])
+    judge_client = _JudgeClient([_judge_pass_payload()])
+    out = explainer.explain_verdict(
+        result, decision, client=fake, judge_client=judge_client)
+    assert out.kind == "rewritten"
+    assert len(judge_client.calls) == 1
+
+
+def test_judge_never_sees_number_failed_drafts():
+    explainer = pytest.importorskip("explainer")
+    result, decision = _fixture()
+    bad = f"{decision.headline} {decision.tradeoff_note} Bonus $9,999.99."
+    fake = _FakeClient([bad, bad])
+    judge_client = _JudgeClient([_judge_pass_payload()])
+    out = explainer.explain_verdict(
+        result, decision, client=fake, judge_client=judge_client)
+    assert (out.kind, out.reason) == ("template", "failed_checks")
+    assert len(judge_client.calls) == 0
+
+
 def test_prompt_carries_no_interest_figures():
     # Rule 4: the allowed set is page-3 only, so the prompt must never list
     # interest internals — a cited interest figure could never verify.

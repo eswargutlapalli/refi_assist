@@ -304,6 +304,24 @@ def test_apply_deploy_secret_fills_missing_only(monkeypatch):
     assert os.environ["MODEL_API_KEY"] == "exported"
 
 
+def test_apply_deploy_secret_copies_baseten_key(monkeypatch):
+    import os
+    import types
+
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("BASETEN_API_KEY", raising=False)
+    _apply_deploy_secret(types.SimpleNamespace(
+        secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
+    assert os.environ["MODEL_API_KEY"] == "m"
+    assert os.environ["BASETEN_API_KEY"] == "b"
+    monkeypatch.setenv("MODEL_API_KEY", "exported-m")
+    monkeypatch.setenv("BASETEN_API_KEY", "exported-b")
+    _apply_deploy_secret(types.SimpleNamespace(
+        secrets={"MODEL_API_KEY": "m", "BASETEN_API_KEY": "b"}))
+    assert os.environ["MODEL_API_KEY"] == "exported-m"
+    assert os.environ["BASETEN_API_KEY"] == "exported-b"
+
+
 def test_apply_deploy_secret_tolerates_no_secrets(monkeypatch):
     import types
 
