@@ -129,40 +129,73 @@ def _allowed_months(result: Comparison) -> set[int]:
     return months
 
 
-def _agreement_ok(text: str, decision: Verdict) -> bool:
-    # The narrative states the verdict headline verbatim and never states a
-    # winner headline from the other side. Too-close narratives keep the
-    # refinance framing in their tradeoff note, so payment phrasing is not
-    # policed there — only winner-only headlines are.
-    # Known limit: verbatim-headline agreement cannot catch softening ("you
-    # might consider refinancing"). Hedging detection is Stage-3 claim-judge
-    # work on a separate model, not a word list here — see the pinned test.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sentence_containing(text: str, fragment: str) -> str:
+    """The sentence holding a trigger phrase. Splits only after end
+    punctuation plus whitespace, so "$129.01 a month." stays whole."""
+    for sentence in _SENTENCE_SPLIT_RE.split(text):
+        if fragment in sentence:
+            return sentence.strip()
+    return fragment
+
+
+def _agreement_problem(text: str, decision: Verdict) -> str | None:
+    """The specific agreement failure, or None when the narrative agrees.
+
+    The narrative states the verdict headline verbatim and never states a
+    winner headline from the other side. Too-close narratives keep the
+    refinance framing in their tradeoff note, so payment phrasing is not
+    policed there — only winner-only headlines are.
+    Known limit: verbatim-headline agreement cannot catch softening ("you
+    might consider refinancing"). Hedging detection is Stage-3 claim-judge
+    work on a separate model, not a word list here — see the pinned test.
+    """
     if decision.headline not in text:
-        return False
+        return ("does not state the verdict headline — state this headline "
+                f"exactly: '{decision.headline}'")
+    headline_triggers: list[str] = []
+    wrong_verdict = False
     if decision.choice == "refinance_now":
-        if "Too close to call" in text:
-            return False
-        if any(s in text for s in _KEEP_ONLY):
-            return False
-        if _KEEP_PAYMENT_HEADLINE_RE.search(text):
-            return False
+        headline_triggers = [s for s in _KEEP_ONLY if s in text]
+        match = _KEEP_PAYMENT_HEADLINE_RE.search(text)
+        if match is not None:
+            headline_triggers.append(match.group())
+        wrong_verdict = "Too close to call" in text
     elif decision.choice == "keep":
-        if "Too close to call" in text:
-            return False
-        if any(s in text for s in _REFI_ONLY):
-            return False
-        if _REFI_PAYMENT_HEADLINE_RE.search(text):
-            return False
+        headline_triggers = [s for s in _REFI_ONLY if s in text]
+        match = _REFI_PAYMENT_HEADLINE_RE.search(text)
+        if match is not None:
+            headline_triggers.append(match.group())
+        wrong_verdict = "Too close to call" in text
     else:  # too_close: must say so, and must not declare a winner.
         if "Too close to call" not in text:
-            return False
-        if any(s in text for s in _REFI_ONLY + _KEEP_ONLY):
-            return False
-        if _REFI_PAYMENT_HEADLINE_RE.search(text):
-            return False
-        if _KEEP_PAYMENT_HEADLINE_RE.search(text):
-            return False
-    return True
+            return ("does not state the verdict — state this headline "
+                    f"exactly: '{decision.headline}'")
+        headline_triggers = [s for s in _REFI_ONLY + _KEEP_ONLY if s in text]
+        for pattern in (_REFI_PAYMENT_HEADLINE_RE,
+                        _KEEP_PAYMENT_HEADLINE_RE):
+            match = pattern.search(text)
+            if match is not None:
+                headline_triggers.append(match.group())
+    if headline_triggers:
+        sentence = _sentence_containing(text, headline_triggers[0])
+        return (
+            f"This sentence states the other option's headline: "
+            f"'{sentence}'. State the tradeoff as the note does instead."
+        )
+    if wrong_verdict:
+        sentence = _sentence_containing(text, "Too close to call")
+        return (
+            f"This sentence states the wrong verdict: '{sentence}'. "
+            "State the tradeoff as the note does instead."
+        )
+    return None
+
+
+def _agreement_ok(text: str, decision: Verdict) -> bool:
+    return _agreement_problem(text, decision) is None
 
 
 def verify_narrative(
@@ -290,12 +323,10 @@ def verify_narrative(
             else:
                 fail(label, bad_months)
 
-    agreement = _agreement_ok(text, decision)
-    if not agreement:
-        problems.append(
-            "does not agree with the verdict — restate this headline exactly: "
-            f"'{decision.headline}'"
-        )
+    problem = _agreement_problem(text, decision)
+    if problem is not None:
+        problems.append(problem)
+    agreement = problem is None
     feedback = (
         "Narrative failed verification: " + "; ".join(problems) + "."
         if problems else ""

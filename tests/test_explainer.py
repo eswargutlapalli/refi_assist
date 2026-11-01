@@ -306,6 +306,15 @@ def test_prompt_asks_short_headline_first_shape():
     assert "starting with the headline" in system
 
 
+def test_prompt_frames_other_side_as_note():
+    explainer = pytest.importorskip("explainer")
+    result, decision = _fixture()
+    messages = explainer.build_explainer_messages(result, decision)
+    system = messages[0]["content"]
+    assert "tradeoff note" in system
+    assert "never use the other option's headline wording" in system
+
+
 def test_prompt_carries_headline_rates_and_no_interest():
     explainer = pytest.importorskip("explainer")
     result, decision = _fixture()

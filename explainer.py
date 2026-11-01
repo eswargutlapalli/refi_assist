@@ -119,6 +119,9 @@ def build_explainer_messages(
             "Explain a loan-comparison verdict in plain language in 3-5 "
             "sentences, starting with the headline below word for word. "
             "Explain but never change, soften, or contradict the verdict; "
+            "state the other side the way the tradeoff note does "
+            "('but costs $X more in total'); "
+            "never use the other option's headline wording; "
             "use ONLY the figures listed below — every amount as $X.XX, "
             "every month count as digits, no other numbers in any form, no "
             "years, no spelled-out amounts; never invent a figure."
@@ -132,16 +135,22 @@ def build_explainer_messages(
 
 
 def draft_narrative(
-    messages: list[dict[str, Any]], *, client: Any = None
+    messages: list[dict[str, Any]], *, client: Any = None,
+    usage_sink: list[dict[str, Any]] | None = None,
 ) -> str:
     """One narration draft. Narratives earn reasoning (medium); extraction
-    stays minimal — effort is set per slice, never global."""
-    return complete(
+    stays minimal — effort is set per slice, never global. When usage_sink
+    is given, the call's usage dump is appended so offline scoring can
+    account every call without a second pass."""
+    response = complete(
         messages,
         effort=EXPLANATION_EFFORT,
         prompt_cache_key=EXPLAINER_PROMPT_CACHE_KEY,
         client=client,
-    ).text
+    )
+    if usage_sink is not None:
+        usage_sink.append({"model": response.model, **response.usage.as_dict()})
+    return response.text
 
 
 def explain_verdict(
@@ -150,26 +159,37 @@ def explain_verdict(
     rates_pct: tuple[float, ...] = (),
     wait: WaitComparison | None = None,
     client: Any = None,
+    on_draft: Any = None,
 ) -> ExplainResult:
     """Draft, verify, once rewrite with the bad numbers named, else template.
 
     At most two model calls: the draft and at most one rewrite. Anything
     still failing falls back to the code-written template, which passes by
-    construction — the user never sees an unverified number.
+    construction — the user never sees an unverified number. When on_draft
+    is given, it is called after each draft's check as
+    on_draft(attempt, text, report, usage) — the eval recorder uses it to
+    save both drafts, never to change the ladder.
     """
     def done(text: str, kind: str, attempts: int,
              reason: str | None = None) -> ExplainResult:
         return ExplainResult(text, display_status(kind, reason), attempts,
                              kind, reason)
 
+    def once(messages: list[dict[str, Any]], attempt: int) -> tuple[str, Any, Any]:
+        sink: list[dict[str, Any]] = []
+        text = draft_narrative(messages, client=client, usage_sink=sink)
+        checked = verify_narrative(text, result, decision, rates_pct, wait)
+        if on_draft is not None:
+            on_draft(attempt, text, checked, sink[0])
+        return text, checked, sink[0]
+
     messages = build_explainer_messages(result, decision, rates_pct, wait)
     try:
-        draft = draft_narrative(messages, client=client)
+        draft, report, _ = once(messages, 1)
     except LlmError:
         # No draft at all: fail loudly as the template, honestly labeled.
         return done(build_template(result, decision), "template", 0,
                     REASON_MODEL_UNAVAILABLE)
-    report = verify_narrative(draft, result, decision, rates_pct, wait)
     if report.ok:
         return done(draft, "verified", 1)
     retry = messages + [
@@ -179,11 +199,11 @@ def explain_verdict(
         )},
     ]
     try:
-        second = draft_narrative(retry, client=client)
+        second, second_report, _ = once(retry, 2)
     except LlmError:
         return done(build_template(result, decision), "template", 1,
                     REASON_MODEL_UNAVAILABLE)
-    if verify_narrative(second, result, decision, rates_pct, wait).ok:
+    if second_report.ok:
         return done(second, "rewritten", 2)
     return done(build_template(result, decision), "template", 2,
                 REASON_FAILED_CHECKS)

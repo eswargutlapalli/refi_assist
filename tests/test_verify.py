@@ -62,6 +62,32 @@ def test_cent_display_rounding_passes():
     assert report.ok
 
 
+def test_opposing_phrase_feedback_quotes_sentence():
+    verify = pytest.importorskip("verify")
+    result, decision = _fixture()
+    assert decision.choice == "refinance_now"
+    sentence = (
+        f"Keeping your loan costs ${abs(result.total_savings):,.2f} "
+        "less in total."
+    )
+    text = f"{decision.headline} {decision.tradeoff_note} {sentence}"
+    report = verify.verify_narrative(text, result, decision)
+    assert not report.ok and not report.agreement_ok
+    assert sentence in report.feedback
+    assert "State the tradeoff as the note does instead" in report.feedback
+    assert "restate this headline" not in report.feedback
+
+
+def test_missing_headline_feedback_names_headline():
+    verify = pytest.importorskip("verify")
+    result, decision = _fixture()
+    text = decision.tradeoff_note
+    report = verify.verify_narrative(text, result, decision)
+    assert not report.ok and not report.agreement_ok
+    assert decision.headline in report.feedback
+    assert "restate this headline" not in report.feedback
+
+
 def test_opposing_headline_fails_agreement():
     verify = pytest.importorskip("verify")
     result, keep = _fixture("earliest_payoff")
