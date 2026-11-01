@@ -1,0 +1,18 @@
+{
+  "id": "near-tie",
+  "priority": "lowest_total_cost",
+  "loan_text": "Statement: balance $20,000.00, APR 7.0%, 48 payments remaining. Prepayment penalty: $0.",
+  "offer_text": "Refinance offer: 6.5% APR, 48 months, $150 fee due at signing.",
+  "true_loan": {
+    "balance": 20000.0,
+    "annual_rate_pct": 7.0,
+    "remaining_months": 48,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.5,
+    "term_months": 48,
+    "fees": 150.0,
+    "fees_financed": false
+  }
+}

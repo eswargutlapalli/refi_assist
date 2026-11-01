@@ -1,0 +1,18 @@
+{
+  "id": "spoken-rate",
+  "priority": "lowest_total_cost",
+  "loan_text": "Auto loan details: balance $16,200.00, fixed APR 8.9%, 42 payments left. Prepayment penalty: $0.",
+  "offer_text": "New offer: a rate of four point seven nine percent for sixty months, with a $199 processing fee paid at signing.",
+  "true_loan": {
+    "balance": 16200.0,
+    "annual_rate_pct": 8.9,
+    "remaining_months": 42,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 4.79,
+    "term_months": 60,
+    "fees": 199.0,
+    "fees_financed": false
+  }
+}

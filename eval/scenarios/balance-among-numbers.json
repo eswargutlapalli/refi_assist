@@ -1,0 +1,18 @@
+{
+  "id": "balance-among-numbers",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Payoff quote good through Nov 15: payoff balance $13,275.10. Last monthly payment received: $412.33. Late fee assessed in September: $25.00 (already included in the balance above). Loan rate: 10.9% APR with 34 payments remaining. Prepayment penalty: $75.",
+  "offer_text": "Refinance offer: 8.4% APR for 48 months, no lender fees.",
+  "true_loan": {
+    "balance": 13275.1,
+    "annual_rate_pct": 10.9,
+    "remaining_months": 34,
+    "prepayment_penalty": 75.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 8.4,
+    "term_months": 48,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

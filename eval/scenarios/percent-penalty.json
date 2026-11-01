@@ -1,0 +1,18 @@
+{
+  "id": "percent-penalty",
+  "priority": "lowest_total_cost",
+  "loan_text": "Loan snapshot: payoff balance $14,000.00 at 10.5% APR, 40 payments remaining. Early payoff charge: 2% of the remaining balance.",
+  "offer_text": "Refinance at 7.9% APR for 48 months. No fees.",
+  "true_loan": {
+    "balance": 14000.0,
+    "annual_rate_pct": 10.5,
+    "remaining_months": 40,
+    "prepayment_penalty": 280.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.9,
+    "term_months": 48,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

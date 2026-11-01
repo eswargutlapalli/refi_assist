@@ -1,0 +1,18 @@
+{
+  "id": "fees-rolled-in",
+  "priority": "lowest_total_cost",
+  "loan_text": "Current loan: $17,600.00 balance, 9.9% APR, 50 payments remaining, no prepayment penalty.",
+  "offer_text": "Refinance at 6.5% APR for 60 months. The $495 origination fee will be rolled into your new loan balance.",
+  "true_loan": {
+    "balance": 17600.0,
+    "annual_rate_pct": 9.9,
+    "remaining_months": 50,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.5,
+    "term_months": 60,
+    "fees": 495.0,
+    "fees_financed": true
+  }
+}

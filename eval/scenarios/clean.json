@@ -1,0 +1,18 @@
+{
+  "id": "clean",
+  "priority": "lowest_total_cost",
+  "loan_text": "Your auto loan statement. Outstanding balance: $18,500.00. Annual percentage rate (APR): 9.5%. Payments remaining: 48. Prepayment penalty: $0.",
+  "offer_text": "Refinance offer: 5.9% APR for 60 months. No origination fees.",
+  "true_loan": {
+    "balance": 18500.0,
+    "annual_rate_pct": 9.5,
+    "remaining_months": 48,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 5.9,
+    "term_months": 60,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

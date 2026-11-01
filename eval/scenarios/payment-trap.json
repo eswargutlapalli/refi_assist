@@ -1,0 +1,18 @@
+{
+  "id": "payment-trap",
+  "priority": "lowest_total_cost",
+  "loan_text": "Your loan: $18,000.00 balance at 8.5% APR, 36 payments to go. Prepayment penalty: $0.",
+  "offer_text": "Lower your payment! Refinance at 7.9% APR for 72 months with no fees.",
+  "true_loan": {
+    "balance": 18000.0,
+    "annual_rate_pct": 8.5,
+    "remaining_months": 36,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.9,
+    "term_months": 72,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

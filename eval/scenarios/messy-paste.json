@@ -1,0 +1,18 @@
+{
+  "id": "messy-paste",
+  "priority": "lowest_total_cost",
+  "loan_text": "AUTO LOAN *** October 2026 statement *** Questions? Call 1-800-555-0142. Last payment of $512.10 received Oct 15 \u2014 thank you! Year-to-date interest paid: $980.44. Current payoff balance: $12,340.55. APR: 11.2% (fixed). Payments remaining: 36. Prepayment penalty if you refinance elsewhere: $150. Next payment due Nov 1.",
+  "offer_text": "You are pre-approved to refinance at 6.9% APR over 48 months with zero fees.",
+  "true_loan": {
+    "balance": 12340.55,
+    "annual_rate_pct": 11.2,
+    "remaining_months": 36,
+    "prepayment_penalty": 150.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.9,
+    "term_months": 48,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "fees-method-unstated",
+  "priority": "lowest_total_cost",
+  "loan_text": "Auto loan statement: payoff balance $16,800.00, fixed APR 9.6%, 46 payments remaining. Prepayment penalty: $0.",
+  "offer_text": "Refinance at 6.4% APR for 60 months; $300 origination fee.",
+  "true_loan": {
+    "balance": 16800.0,
+    "annual_rate_pct": 9.6,
+    "remaining_months": 46,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.4,
+    "term_months": 60,
+    "fees": 300.0,
+    "fees_financed": null
+  }
+}

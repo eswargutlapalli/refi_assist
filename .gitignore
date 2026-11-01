@@ -8,6 +8,9 @@ docs/daily_notes/
 # Agent plans and scratch notes — local working material, never submit
 .agents/
 
+# Eval run folders — regenerable model-output records, never submit
+eval/runs/
+
 # Python
 __pycache__/
 *.pyc

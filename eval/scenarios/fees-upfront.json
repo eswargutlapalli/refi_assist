@@ -1,0 +1,18 @@
+{
+  "id": "fees-upfront",
+  "priority": "lowest_total_cost",
+  "loan_text": "Loan details: payoff amount $15,400.00, rate 8.1% APR, 38 payments remaining. Prepayment penalty: $0.",
+  "offer_text": "Offer: 6.5% APR, 48 months, with a $350 fee due at signing (not added to the loan).",
+  "true_loan": {
+    "balance": 15400.0,
+    "annual_rate_pct": 8.1,
+    "remaining_months": 38,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.5,
+    "term_months": 48,
+    "fees": 350.0,
+    "fees_financed": false
+  }
+}

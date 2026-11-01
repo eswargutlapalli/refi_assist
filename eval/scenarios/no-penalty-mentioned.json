@@ -1,0 +1,18 @@
+{
+  "id": "no-penalty-mentioned",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Your auto loan: remaining balance $19,800.00, APR 7.8%, 44 monthly payments remaining.",
+  "offer_text": "Refinance offer: 6.8% APR, 48-month term, $250 closing fee due at signing.",
+  "true_loan": {
+    "balance": 19800.0,
+    "annual_rate_pct": 7.8,
+    "remaining_months": 44,
+    "prepayment_penalty": null
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.8,
+    "term_months": 48,
+    "fees": 250.0,
+    "fees_financed": false
+  }
+}

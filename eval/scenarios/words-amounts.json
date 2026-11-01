@@ -1,0 +1,18 @@
+{
+  "id": "words-amounts",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Statement summary: your current balance is twenty-one thousand seven hundred fifty dollars. Your rate is 8.4% APR. You have fifty-four monthly payments remaining. There is no prepayment penalty.",
+  "offer_text": "Refinance offer: 6.25% APR, 60 monthly payments, plus a three hundred ninety-five dollar origination fee due at signing.",
+  "true_loan": {
+    "balance": 21750.0,
+    "annual_rate_pct": 8.4,
+    "remaining_months": 54,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.25,
+    "term_months": 60,
+    "fees": 395.0,
+    "fees_financed": false
+  }
+}

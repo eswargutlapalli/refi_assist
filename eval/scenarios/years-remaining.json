@@ -1,0 +1,18 @@
+{
+  "id": "years-remaining",
+  "priority": "earliest_payoff",
+  "loan_text": "Auto loan summary: balance $22,000.00, 7.4% APR, with 3 years remaining. No prepayment penalty.",
+  "offer_text": "Refinance option: 6.1% APR stretched over 60 months, $299 fee paid upfront.",
+  "true_loan": {
+    "balance": 22000.0,
+    "annual_rate_pct": 7.4,
+    "remaining_months": 36,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.1,
+    "term_months": 60,
+    "fees": 299.0,
+    "fees_financed": false
+  }
+}
