@@ -170,8 +170,12 @@ def record_scenario(scenario: dict[str, Any], client: Any,
         purpose = ("explain_draft" if attempt == 1 else "explain_rewrite")
         usage.append({"purpose": purpose, **call_usage})
 
+    judge_sink: list[dict[str, Any]] = []
     explained = explain_verdict(
-        result, decision, tuple(rates_pct), client=client, on_draft=on_draft)
+        result, decision, tuple(rates_pct), client=client, on_draft=on_draft,
+        judge_usage_sink=judge_sink)
+    if judge_sink:
+        usage.append({"purpose": "judge", **judge_sink[0]})
 
     record = {
         "id": scenario["id"],

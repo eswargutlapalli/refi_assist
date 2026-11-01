@@ -140,7 +140,7 @@ def test_record_clean_verified_first_pass(tmp_path):
     assert len(expl["drafts"]) == 1
     assert expl["drafts"][0]["ok"] is True
     assert [u["purpose"] for u in rec["usage"]] == [
-        "extract_loan", "extract_offer", "explain_draft"]
+        "extract_loan", "extract_offer", "explain_draft", "judge"]
     for entry in rec["usage"]:
         assert set(entry) == {
             "purpose", "model", "prompt_tokens", "completion_tokens",
@@ -208,7 +208,8 @@ def test_record_cap_stops_before_next(tmp_path):
     stats = record.record_all(
         str(data_dir), str(run_dir), fake, cap=3)
     assert stats["recorded"] == ["clean"]
-    assert stats["calls"] == 3
+    # Three narrator calls plus the always-on judge (decision 26).
+    assert stats["calls"] == 4
 
 
 def test_scorer_all_correct(tmp_path):
@@ -227,6 +228,22 @@ def test_scorer_all_correct(tmp_path):
     assert out["explanation"]["first_pass_ok"] is True
     assert out["explanation"]["recorded_kind"] == "verified"
     assert out["verdict_match"] is True
+
+
+def test_scorer_judge_template_over_clean_drafts_matches(tmp_path):
+    loan_json, offer_json = _terms_json()
+    result, decision = _clean_expected()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    rec, _ = _record_clean(tmp_path, [loan_json, offer_json, draft])
+    scenario = _scenario("clean")
+    rec["explanation"]["kind"] = "template"
+    rec["explanation"]["reason"] = "failed_meaning_check"
+    out = score.score_scenario(rec, scenario)
+    assert out["explanation"]["drafts_recheck"] == [True]
+    assert out["explanation"]["kind_match"] is True
+    rec["explanation"]["reason"] = "failed_checks"
+    out = score.score_scenario(rec, scenario)
+    assert out["explanation"]["kind_match"] is False
 
 
 def test_scorer_cleared_penalty_counts_as_fix(tmp_path):
@@ -406,4 +423,17 @@ def test_report_written_next_to_run(tmp_path):
     assert "| clean |" in report
     assert "7/7" in report
     assert "grounded" in report and "verdict" in report.lower()
+
+
+def test_report_separates_judge_template_reasons(tmp_path):
+    loan_json, offer_json = _terms_json()
+    result, decision = _clean_expected()
+    draft = f"{decision.headline} {decision.tradeoff_note}"
+    rec, run_dir = _record_clean(tmp_path, [loan_json, offer_json, draft])
+    rec["explanation"]["kind"] = "template"
+    rec["explanation"]["reason"] = "failed_meaning_check"
+    (run_dir / "clean.json").write_text(json.dumps(rec))
+    report = score.score_run(str(SCENARIOS), str(run_dir))
+    assert "template (failed_meaning_check)" in report
+    assert "template/failed_meaning_check ×1" in report
 

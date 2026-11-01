@@ -138,11 +138,17 @@ def score_extraction(record: dict[str, Any],
             "evaluated": len(fields)}
 
 
+# Reasons the claim judge (decision 26) produces: the drafts read clean
+# on numbers, but the template still stands — that is agreement, not drift.
+_JUDGE_TEMPLATE_REASONS = ("failed_meaning_check", "judge_unavailable")
+
+
 def score_explanation(record: dict[str, Any],
                       scenario: dict[str, Any]) -> dict[str, Any]:
     """Recheck each stored draft against engine output recomputed from the
     true terms. The first draft decides the first-pass rate; the recorded
-    kind must agree with what the drafts show."""
+    kind must agree with what the drafts show, except that a judge-driven
+    template over number-clean drafts is the judge speaking, not drift."""
     loan = record_mod.build_true_loan(scenario)
     offer = record_mod.build_true_offer(scenario)
     result = compare(loan, offer)
@@ -158,11 +164,18 @@ def score_explanation(record: dict[str, Any],
         inferred = "rewritten"
     else:
         inferred = "template"
+    recorded_kind = record["explanation"]["kind"]
+    recorded_reason = record["explanation"]["reason"]
+    match = inferred == recorded_kind
+    if (not match and inferred in ("verified", "rewritten")
+            and recorded_kind == "template"
+            and recorded_reason in _JUDGE_TEMPLATE_REASONS):
+        match = True
     return {"first_pass_ok": bool(drafts) and drafts[0],
-            "recorded_kind": record["explanation"]["kind"],
-            "recorded_reason": record["explanation"]["reason"],
+            "recorded_kind": recorded_kind,
+            "recorded_reason": recorded_reason,
             "drafts_recheck": drafts,
-            "kind_match": inferred == record["explanation"]["kind"]}
+            "kind_match": match}
 
 
 def verdict_from_extracted(record: dict[str, Any],
@@ -275,12 +288,17 @@ def score_run(data_dir: str | Path, run_dir: str | Path) -> str:
         "| --- | --- | --- | --- | --- | --- | --- | --- |")
     for s in scored:
         ext = s["extraction"]
+        kind = s["explanation"]["recorded_kind"]
+        reason = s["explanation"]["recorded_reason"]
+        # Template reasons stay visible per scenario: a meaning-check flag
+        # and a judge outage are different failures sharing one kind.
+        cell = f"{kind} ({reason})" if kind == "template" and reason else kind
         lines.append(
             f"| {s['id']} | {s['priority']} | {s['true_verdict_choice']} | "
             f"{ext['correct']}/{ext['evaluated']} | "
             f"{', '.join(ext['wrong']) or '—'} | "
             f"{', '.join(ext['needs_fix']) or '—'} | "
-            f"{s['explanation']['recorded_kind']} | "
+            f"{cell} | "
             f"{'yes' if s['verdict_match'] else 'NO (' + s['extracted_verdict_choice'] + ')'} |")
     lines += ["", "## Summary", ""]
     stated_rate = (total_correct / total_stated) if total_stated else 0.0
