@@ -56,16 +56,58 @@ def must_choose(scenario: dict[str, Any]) -> bool:
             and scenario["true_offer"]["fees_financed"] is None)
 
 
+def _expect_map(scenario: dict[str, Any]) -> dict[str, str]:
+    """The optional per-field truth markers: {"expect":
+    {"offer.fees_financed": "cleared"}}. Absent means nothing was expected
+    to clear. Unknown labels and non-"cleared" values are fixture errors,
+    failed loudly so a typo never scores as a pass."""
+    expect = scenario.get("expect", {})
+    if not isinstance(expect, dict):
+        raise ValueError(
+            f"{scenario.get('id')}: 'expect' must be an object, "
+            f"got {expect!r}")
+    sides = {"loan": "true_loan", "offer": "true_offer"}
+    for label, marker in expect.items():
+        parts = label.split(".")
+        truth_key = sides.get(parts[0] if len(parts) == 2 else "")
+        if truth_key is None or parts[1] not in scenario.get(truth_key, {}):
+            raise ValueError(
+                f"{scenario.get('id')}: 'expect' labels an unknown "
+                f"field {label!r}")
+        if marker != "cleared":
+            raise ValueError(
+                f"{scenario.get('id')}: 'expect' for {label!r} must be "
+                f"'cleared', got {marker!r}")
+    return expect
+
+
+def _expect_cleared(scenario: dict[str, Any], side: str, field: str) -> bool:
+    return _expect_map(scenario).get(f"{side}.{field}") == "cleared"
+
+
 def classify(side: str, field: str, truth: Any, status: str, value: Any,
              scenario: dict[str, Any]) -> tuple[str, str]:
-    """One field against the truth: correct, wrong, or needs_fix (wrong,
-    cleared, or missing — everything a user would have to fix at confirm).
-    Returns the category plus a short note naming the failure kind only."""
+    """One field against the truth: correct, wrong, needs_fix (wrong,
+    cleared, or missing — everything a user would have to fix at confirm),
+    correctly_cleared (cleared as the scenario expected), or
+    grounded_where_clear_expected (grounded despite the marker; a value
+    mismatch is also a wrong value). Returns the category plus a short
+    note naming the failure kind only."""
     label = f"{side}.{field}"
     _ = label
     if status == "grounded":
         if value is None:
             return "needs_fix", "grounded with no value"
+        if _expect_cleared(scenario, side, field):
+            # Row 3 counts as correct (the value matches, nothing to fix)
+            # but stays visible under its own heading; row 4 is also a
+            # wrong value, exactly like an ordinary wrong grounding.
+            if truth is not None and values_equal(field, value, truth):
+                return "correct", "grounded where clear was expected"
+            detail = ("value differs from truth" if truth is not None
+                      else "truth is unstated")
+            return ("grounded_where_clear_expected",
+                    f"grounded where clear was expected; {detail}")
         if truth is None:
             if field == "fees_financed" and must_choose(scenario):
                 return "wrong", "must-choose flag grounded either way"
@@ -74,11 +116,20 @@ def classify(side: str, field: str, truth: Any, status: str, value: Any,
             return "correct", ""
         return "wrong", "grounded but not equal to the truth"
     if status == "cleared":
+        if _expect_cleared(scenario, side, field):
+            return "correctly_cleared", "cleared as expected"
         return "needs_fix", "cleared for the user to enter"
     if status == "not_stated":
         if truth is None and not (
                 field == "fees_financed" and must_choose(scenario)):
+            # The field really isn't there; a marker changes nothing.
             return "correct", ""
+        if truth is not None and _expect_cleared(scenario, side, field):
+            # The value is on the page in a form we can't prove, and the
+            # confirm page leaves the box blank, never 0 — the user types
+            # it in, so this counts toward the confirmation-edit rate.
+            return ("correctly_cleared",
+                    "stated but unprovable; the user types it in")
         return "needs_fix", "missing"
     return "needs_fix", f"unexpected status {status!r}"
 
@@ -105,7 +156,10 @@ def score_extraction(record: dict[str, Any],
     wrong: list[str] = []
     needs_fix: list[str] = []
     mismatches: list[str] = []
+    correctly_cleared: list[str] = []
+    clear_expected_grounded: list[str] = []
     correct = 0
+    expect = _expect_map(scenario)
     for side, key, text_key in (("loan", "true_loan", "loan_text"),
                                 ("offer", "true_offer", "offer_text")):
         stored = record["extraction"][side]["fields"]
@@ -130,12 +184,27 @@ def score_extraction(record: dict[str, Any],
                 correct += 1
             if category == "wrong":
                 wrong.append(label)
-            if category == "needs_fix" or category == "wrong":
+            if category == "correctly_cleared":
+                correctly_cleared.append(label)
+            if category == "grounded_where_clear_expected":
+                # Row 4: the marker mismatch is its own category, but the
+                # value mismatch counts exactly like an ordinary wrong
+                # value — in both lists.
+                wrong.append(label)
+            if category in ("needs_fix", "wrong", "correctly_cleared",
+                            "grounded_where_clear_expected"):
                 if label not in needs_fix:
                     needs_fix.append(label)
+            if (label in expect and entry["status"] == "grounded"
+                    and entry["value"] is not None
+                    and label not in clear_expected_grounded):
+                # Rows 3 and 4 stay visible under one heading even though
+                # row 3 counts as correct.
+                clear_expected_grounded.append(label)
     return {"fields": fields, "correct": correct, "wrong": wrong,
-            "needs_fix": needs_fix, "recheck_mismatches": mismatches,
-            "evaluated": len(fields)}
+            "needs_fix": needs_fix, "correctly_cleared": correctly_cleared,
+            "clear_expected_grounded": clear_expected_grounded,
+            "recheck_mismatches": mismatches, "evaluated": len(fields)}
 
 
 # Reasons the claim judge (decision 26) produces: the drafts read clean
@@ -271,6 +340,10 @@ def score_run(data_dir: str | Path, run_dir: str | Path) -> str:
     total_wrong = sum(len(s["extraction"]["wrong"]) for s in scored)
     total_fix = sum(len(s["extraction"]["needs_fix"]) for s in scored)
     evaluated = sum(s["extraction"]["evaluated"] for s in scored)
+    total_cc = sum(len(s["extraction"]["correctly_cleared"]) for s in scored)
+    total_ceg = sum(
+        len(s["extraction"]["clear_expected_grounded"]) for s in scored)
+    total_marked = sum(len(_expect_map(scenarios[s["id"]])) for s in scored)
     kinds: dict[str, int] = {}
     for scored_one in scored:
         key = (f"{scored_one['explanation']['recorded_kind']}/"
@@ -315,6 +388,19 @@ def score_run(data_dir: str | Path, run_dir: str | Path) -> str:
             lines.append(
                 f"  - {s['id']} {label}: extracted {fields['value']!r}, "
                 f"{fields['note']}")
+    cc_rate = f" ({total_cc / total_marked:.1%})" if total_marked else ""
+    lines.append(f"- correctly cleared: {total_cc}/{total_marked}{cc_rate}")
+    for s in scored:
+        for label in s["extraction"]["correctly_cleared"]:
+            lines.append(f"  - {s['id']} {label}: cleared as expected")
+    ceg_rate = f" ({total_ceg / total_marked:.1%})" if total_marked else ""
+    lines.append(
+        f"- grounded where clear was expected: "
+        f"{total_ceg}/{total_marked}{ceg_rate}")
+    for s in scored:
+        for label in s["extraction"]["clear_expected_grounded"]:
+            fields = s["extraction"]["fields"][label]
+            lines.append(f"  - {s['id']} {label}: {fields['note']}")
     lines.append(
         f"- confirmation-edit rate: {total_fix}/{evaluated} "
         f"({(total_fix / evaluated if evaluated else 0.0):.1%})")

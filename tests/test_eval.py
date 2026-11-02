@@ -437,3 +437,141 @@ def test_report_separates_judge_template_reasons(tmp_path):
     assert "template (failed_meaning_check)" in report
     assert "template/failed_meaning_check ×1" in report
 
+
+def _expect_scenario(sid, label):
+    scenario = _scenario(sid)
+    scenario["expect"] = {label: "cleared"}
+    return scenario
+
+
+def test_scorer_cleared_with_marker_counts_correctly_cleared():
+    scenario = _expect_scenario("percent-penalty",
+                               "loan.prepayment_penalty")
+    category, _ = score.classify("loan", "prepayment_penalty", 0.02,
+                                 "cleared", None, scenario)
+    assert category == "correctly_cleared"
+
+
+def _grounded_clean_fields(cleared=None):
+    """Clean.json fields, all grounded, with one entry cleared instead."""
+    fields = {
+        "loan": {
+            "balance": {"value": 18500.0, "status": "grounded",
+                        "quote": "Outstanding balance: $18,500.00"},
+            "annual_rate_pct": {"value": 9.5, "status": "grounded",
+                                "quote": "Annual percentage rate (APR): 9.5%"},
+            "remaining_months": {"value": 48, "status": "grounded",
+                                 "quote": "Payments remaining: 48"},
+            "prepayment_penalty": {"value": 0.0, "status": "grounded",
+                                   "quote": "Prepayment penalty: $0"},
+        },
+        "offer": {
+            "annual_rate_pct": {"value": 5.9, "status": "grounded",
+                                "quote": "5.9% APR"},
+            "term_months": {"value": 60, "status": "grounded",
+                            "quote": "for 60 months"},
+            "fees": {"value": 0.0, "status": "grounded",
+                     "quote": "No origination fees"},
+            "fees_financed": {"value": None, "status": "not_stated",
+                              "quote": None},
+        },
+    }
+    if cleared is not None:
+        side, field = cleared.split(".")
+        fields[side][field] = {"value": None, "status": "cleared",
+                               "quote": None}
+    return {"extraction": {"loan": {"fields": fields["loan"]},
+                           "offer": {"fields": fields["offer"]}}}
+
+
+def test_scorer_correctly_cleared_joins_needs_fix_not_correct():
+    scenario = _expect_scenario("clean", "loan.prepayment_penalty")
+    out = score.score_extraction(
+        _grounded_clean_fields("loan.prepayment_penalty"), scenario)
+    assert out["correctly_cleared"] == ["loan.prepayment_penalty"]
+    assert "loan.prepayment_penalty" in out["needs_fix"]
+    assert "loan.prepayment_penalty" not in out["wrong"]
+    assert out["correct"] == 6
+
+
+def test_scorer_grounded_match_with_marker_stays_correct_but_listed():
+    scenario = _expect_scenario("clean", "loan.balance")
+    category, note = score.classify("loan", "balance", 18500.0,
+                                    "grounded", 18500.0, scenario)
+    assert category == "correct"
+    assert "where clear was expected" in note
+    out = score.score_extraction(_grounded_clean_fields(), scenario)
+    assert out["correct"] == 7
+    assert "loan.balance" not in out["needs_fix"]
+    assert "loan.balance" not in out["wrong"]
+    assert out["clear_expected_grounded"] == ["loan.balance"]
+
+
+def test_scorer_grounded_mismatch_with_marker_is_wrong_and_fix():
+    scenario = _expect_scenario("clean", "loan.balance")
+    rec = {"extraction": {
+        "loan": {"fields": {
+            "balance": {"value": 18500.0, "status": "grounded",
+                        "quote": "Outstanding balance: $18,500.00"},
+            "annual_rate_pct": {"value": 9.5, "status": "grounded",
+                                "quote": "Annual percentage rate (APR): 9.5%"},
+            "remaining_months": {"value": 48, "status": "grounded",
+                                 "quote": "Payments remaining: 48"},
+            "prepayment_penalty": {"value": 0.0, "status": "grounded",
+                                   "quote": "Prepayment penalty: $0"},
+        }},
+        "offer": {"fields": {
+            "annual_rate_pct": {"value": 5.9, "status": "grounded",
+                                "quote": "5.9% APR"},
+            "term_months": {"value": 60, "status": "grounded",
+                            "quote": "for 60 months"},
+            "fees": {"value": 0.0, "status": "grounded",
+                     "quote": "No origination fees"},
+            "fees_financed": {"value": None, "status": "not_stated",
+                              "quote": None},
+        }},
+    }}
+    scenario["true_loan"] = dict(scenario["true_loan"], balance=9999.0)
+    out = score.score_extraction(rec, scenario)
+    fields = out["fields"]["loan.balance"]
+    assert fields["category"] == "grounded_where_clear_expected"
+    # An ordinary wrong value lands in both lists; the marker mismatch
+    # follows the same path.
+    assert out["wrong"] == ["loan.balance"]
+    assert "loan.balance" in out["needs_fix"]
+    assert out["clear_expected_grounded"] == ["loan.balance"]
+
+
+def test_scorer_unstated_marker_truth_none_stays_correct():
+    scenario = _expect_scenario("clean", "offer.fees_financed")
+    category, _ = score.classify("offer", "fees_financed", None,
+                                 "not_stated", None, scenario)
+    assert category == "correct"
+
+
+def test_scorer_unstated_marker_truth_valued_counts_correctly_cleared():
+    scenario = _expect_scenario("clean", "loan.balance")
+    category, _ = score.classify("loan", "balance", 18500.0,
+                                 "not_stated", None, scenario)
+    assert category == "correctly_cleared"
+    rec = _grounded_clean_fields()
+    rec["extraction"]["loan"]["fields"]["balance"] = {
+        "value": None, "status": "not_stated", "quote": None}
+    out = score.score_extraction(rec, scenario)
+    assert out["correctly_cleared"] == ["loan.balance"]
+    assert "loan.balance" in out["needs_fix"]
+    assert "loan.balance" not in out["wrong"]
+    assert out["correct"] == 6
+
+
+def test_scorer_expect_rejects_unknown_label_and_value():
+    scenario = _scenario("clean")
+    scenario["expect"] = {"offer.typo": "cleared"}
+    rec = {"extraction": {"loan": {"fields": {}},
+                          "offer": {"fields": {}}}}
+    with pytest.raises(ValueError, match="unknown field"):
+        score.score_extraction(rec, scenario)
+    scenario["expect"] = {"loan.balance": "grounded"}
+    with pytest.raises(ValueError, match="must be 'cleared'"):
+        score.score_extraction(rec, scenario)
+
