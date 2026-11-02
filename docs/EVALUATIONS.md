@@ -73,7 +73,9 @@ tokens, summed across the run.
 
 Explanation columns read verified / rewritten / template. Full per-scenario
 tables are in `docs/eval/dev-01-REPORT.md` through `docs/eval/dev-04-REPORT.md`.
-`dev-01` is the frozen baseline.
+`dev-01` is the frozen baseline. Thirteen dev scenarios, one recording per
+run, and model output varies between runs. These are descriptive counts,
+not statistical estimates.
 
 dev-01 to dev-02 was driven by quote-only attribution (decision 21) plus
 flag counting (decision 22). Adjacent amounts like "APR, 48 months" stopped
@@ -101,13 +103,22 @@ line (fresh drafts the prompt never saw) gets its own row here:
 | Judge set | Catches | False flags | Errors |
 |---|---|---|---|
 | dev fixtures (12) | 6/6 | 0/6 | 0 |
-| held-out drafts | — | — | — |
+| held-out drafts (8) | 3/4 | 0/4 | 0 |
 
 Descriptive counts, not estimates — and the judge stays meaning-only.
 Number verification is unchanged and still runs first.
 
-Thirteen scenarios, one recording per run, and model output varies
-between runs. These are descriptive counts, not statistical estimates.
+The held-out drafts (4 bad, 4 clean) were written by the developer after
+the judge prompt was final and never seen by the agent. Three catches
+came back with exactly the expected problem kind (softening,
+wrong attribution, advice beyond the verdict); the contradiction draft
+passed as clean, so that kind is the miss. No clean draft was flagged,
+no call errored.
+
+The miss was a draft whose sentences were all accurate but whose last
+sentence reversed the verdict ('keeping your current loan is the
+smarter move'). The dev contradiction draft was more direct and was
+caught. With four bad drafts this is a finding, not a rate.
 
 dev-03 is complete: it counted four fixes. Three are by design. The
 percent penalty ("2% of the balance") cannot be copied as dollars, so the
@@ -123,8 +134,9 @@ itself errored during recording.
 
 The dev set found and fixed real problems: decisions 21 through 24 came out
 of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out
-set was written separately and never seen during development. It runs once
-at the freeze and gets its own column.
+set was written by the developer after the dev rounds, never seen by the
+agent and never used to change code. It runs once at the freeze and gets
+its own column.
 
 heldout-01 fills that column: 12 scenarios, recorded once. 89/91 fields
 grounded and correct; the other 2 were correctly cleared (expected
@@ -191,8 +203,14 @@ at 1 wrong.
 
 Hedging or softening the verdict passes the word-list check; catching it is
 the claim judge's job (§5 above), live on Muse Spark Open via Baseten, as is
-right number with wrong meaning. No fine-tuning signal exists yet; the
-Fireworks experiment waits on the core build.
+right number with wrong meaning. No fine-tuning signal exists yet. Fine-tuning was not pursued for this
+submission.
+
+Known limitation: the claim judge can miss a quiet reversal of the
+verdict at the end of an otherwise accurate draft (held-out §5). Next
+step after submission: new contradiction drafts, a judge-prompt
+revision, then a fresh held-out set. The prompt is not tuned against
+this set.
 
 ## 8. Reproduce it
 
@@ -203,4 +221,12 @@ stay gitignored; copy `REPORT.md` into `docs/eval/` to keep a report.
 ```
 python3 -m eval.record --data eval/scenarios --run-dir eval/runs/dev-04
 python3 -m eval.score --data eval/scenarios --run-dir eval/runs/dev-04
+```
+
+Held-out, from the committed set (`eval/holdout/`, recorded once at the
+freeze into the gitignored `eval/runs/heldout-01/`):
+
+```
+python3 -m eval.record --data eval/holdout --run-dir eval/runs/heldout-01
+python3 -m eval.score --data eval/holdout --run-dir eval/runs/heldout-01
 ```

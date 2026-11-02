@@ -1,0 +1,122 @@
+[
+  {
+    "id": "ho-clean-refinance-total",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Refinancing saves you $723.94 in total.",
+    "tradeoff_note": "Your payment drops $87.96 a month and you save $723.94 in total, but the new loan runs 8 months longer.",
+    "figures": [
+      "Lower rate: saves $1,150.00.",
+      "Longer term: costs $426.06.",
+      "Fees and charges: cost $0.00.",
+      "Breakeven: month 9."
+    ],
+    "draft": "Refinancing saves you $723.94 in total. The lower rate does most of the work, saving $1,150.00, while the 8 extra months cost $426.06 and there are no fees. Your payment also drops $87.96 a month, and the savings pass the costs by month 9."
+  },
+  {
+    "id": "ho-clean-too-close",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Too close to call on payment \u2014 $6.40 a month apart.",
+    "tradeoff_note": "The two payments are $6.40 a month apart, and refinancing costs $212.30 more in total.",
+    "figures": [
+      "Lower rate: saves $310.20.",
+      "Longer term: costs $402.50.",
+      "Fees and charges: cost $120.00.",
+      "Breakeven: month 31."
+    ],
+    "draft": "Too close to call on payment \u2014 $6.40 a month apart. Neither option clearly wins on the payment you chose to prioritize. Refinancing costs $212.30 more in total: the lower rate saves $310.20, but the longer term costs $402.50 and fees add $120.00."
+  },
+  {
+    "id": "ho-clean-keep-payoff",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Your current loan pays off first \u2014 22 months sooner.",
+    "tradeoff_note": "Refinancing would lower your payment by $131.75 a month, but your current loan pays off 22 months sooner and costs $1,046.18 less in total.",
+    "figures": [
+      "Lower rate: saves $388.40.",
+      "Longer term: costs $1,159.58.",
+      "Fees and charges: cost $275.00.",
+      "Breakeven: never."
+    ],
+    "draft": "Your current loan pays off first \u2014 22 months sooner. Refinancing would cut your payment by $131.75 a month, but it stretches the loan and costs $1,046.18 more in total. The lower rate saves $388.40, which the longer term ($1,159.58) and $275.00 in fees more than cancel, so it never breaks even."
+  },
+  {
+    "id": "ho-clean-refinance-payment-costs-more",
+    "expected_passed": true,
+    "expected_problems": [],
+    "headline": "Refinancing lowers your payment by $114.88 a month.",
+    "tradeoff_note": "Your payment drops $114.88 a month, but you pay $1,924.41 more in total because the new loan runs 21 months longer.",
+    "figures": [
+      "Lower rate: saves $372.15.",
+      "Longer term: costs $2,296.56.",
+      "Fees and charges: cost $0.00.",
+      "Breakeven: never."
+    ],
+    "draft": "Refinancing lowers your payment by $114.88 a month. That is the priority you picked, so refinancing wins here. The trade-off is real: you pay $1,924.41 more in total, because the 21 extra months cost $2,296.56 against $372.15 saved by the lower rate."
+  },
+  {
+    "id": "ho-bad-softening-keep",
+    "expected_passed": false,
+    "expected_problems": [
+      "softening"
+    ],
+    "headline": "Keeping your loan costs $347.19 less in total.",
+    "tradeoff_note": "Refinancing would lower your payment by $81.12 a month, but keeping your loan costs $347.19 less in total.",
+    "figures": [
+      "Lower rate: saves $512.66.",
+      "Longer term: costs $209.85.",
+      "Fees and charges: cost $650.00.",
+      "Breakeven: never."
+    ],
+    "draft": "Keeping your loan costs $347.19 less in total. That said, the gap is fairly small, and refinancing would lower your payment by $81.12 a month, so it could be just as sensible a choice. The lower rate saves $512.66 and the longer term costs $209.85, but the $650.00 penalty and fees tip it toward keeping."
+  },
+  {
+    "id": "ho-bad-contradiction-payment",
+    "expected_passed": false,
+    "expected_problems": [
+      "contradiction"
+    ],
+    "headline": "Refinancing lowers your payment by $114.88 a month.",
+    "tradeoff_note": "Your payment drops $114.88 a month, but you pay $1,924.41 more in total because the new loan runs 21 months longer.",
+    "figures": [
+      "Lower rate: saves $372.15.",
+      "Longer term: costs $2,296.56.",
+      "Fees and charges: cost $0.00.",
+      "Breakeven: never."
+    ],
+    "draft": "Refinancing lowers your payment by $114.88 a month. Over the full loan, though, you pay $1,924.41 more, because the 21 extra months cost $2,296.56 against $372.15 saved by the lower rate. Weighing everything, keeping your current loan is the smarter move."
+  },
+  {
+    "id": "ho-bad-wrong-attribution-refinance",
+    "expected_passed": false,
+    "expected_problems": [
+      "wrong_attribution"
+    ],
+    "headline": "Refinancing saves you $723.94 in total.",
+    "tradeoff_note": "Your payment drops $87.96 a month and you save $723.94 in total, but the new loan runs 8 months longer.",
+    "figures": [
+      "Lower rate: saves $1,150.00.",
+      "Longer term: costs $426.06.",
+      "Fees and charges: cost $0.00.",
+      "Breakeven: month 9."
+    ],
+    "draft": "Refinancing saves you $723.94 in total. Most of that comes from the longer term, which saves $1,150.00, while the lower rate costs $426.06 and there are no fees. Your payment drops $87.96 a month, and you come out ahead by month 9."
+  },
+  {
+    "id": "ho-bad-advice-extra-payments",
+    "expected_passed": false,
+    "expected_problems": [
+      "advice_beyond_verdict"
+    ],
+    "headline": "Refinancing saves you $723.94 in total.",
+    "tradeoff_note": "Your payment drops $87.96 a month and you save $723.94 in total, but the new loan runs 8 months longer.",
+    "figures": [
+      "Lower rate: saves $1,150.00.",
+      "Longer term: costs $426.06.",
+      "Fees and charges: cost $0.00.",
+      "Breakeven: month 9."
+    ],
+    "draft": "Refinancing saves you $723.94 in total. The lower rate saves $1,150.00, the 8 extra months cost $426.06, and there are no fees, so you are ahead by month 9. Your payment drops $87.96 a month, and putting that amount back toward the new loan as extra principal would pay it off even sooner."
+  }
+]
