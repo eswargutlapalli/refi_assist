@@ -1,0 +1,8 @@
+# Test and batch-eval pins — everything requirements.txt leaves out.
+# Install alongside the runtime file:
+#   pip install -r requirements.txt -r requirements-eval.txt
+# Every pin below is the version in the working venv — keep ==.
+
+pytest==9.1.1       # test runner (tests/)
+pillow==13.0.0      # test-only PNG renderer (tests/_render.py)
+modal==1.6.3        # batch eval on Modal (eval/modal_batch.py, deferred)
