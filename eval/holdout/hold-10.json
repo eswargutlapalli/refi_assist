@@ -1,0 +1,18 @@
+{
+  "id": "hold-10",
+  "priority": "lowest_total_cost",
+  "loan_text": "Blue Mesa Credit Union auto loan status. Balance $16,500.00. Interest rate 7.90% APR. 40 payments remaining. No prepayment penalty.",
+  "offer_text": "Enchanted Hills Lending: refinance at 7.30% APR for 40 months. $120 fee paid at signing.",
+  "true_loan": {
+    "balance": 16500.0,
+    "annual_rate_pct": 7.9,
+    "remaining_months": 40,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.3,
+    "term_months": 40,
+    "fees": 120.0,
+    "fees_financed": false
+  }
+}

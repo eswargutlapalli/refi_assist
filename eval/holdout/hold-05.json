@@ -1,0 +1,18 @@
+{
+  "id": "hold-05",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Tidewater Auto Loans monthly bill. Unpaid balance $15,227.63. Interest rate 8.50% APR. You have forty-two monthly payments remaining. Prepayment penalty: none.",
+  "offer_text": "Willow Creek Bank will refinance at 6.75% APR for forty-eight months with a $225.50 processing fee paid at signing.",
+  "true_loan": {
+    "balance": 15227.63,
+    "annual_rate_pct": 8.5,
+    "remaining_months": 42,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.75,
+    "term_months": 48,
+    "fees": 225.5,
+    "fees_financed": false
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "hold-06",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Zuni Federal Credit Union auto loan. Payoff total $9,845.67. Rate: 11.40% APR. 33 payments still due. Prepayment penalty waived.",
+  "offer_text": "Red Mesa Finance offers 7.25% APR over 36 payments. All lender fees waived.",
+  "true_loan": {
+    "balance": 9845.67,
+    "annual_rate_pct": 11.4,
+    "remaining_months": 33,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.25,
+    "term_months": 36,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

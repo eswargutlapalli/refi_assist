@@ -1,0 +1,21 @@
+{
+  "id": "hold-04",
+  "priority": "lowest_total_cost",
+  "loan_text": "Prairie Star Credit Union statement. Present balance $13,908.20. Annual rate 10.25% APR. Time left on this loan: 40 billing cycles. No penalty for early payoff.",
+  "offer_text": "Summit Ridge Financial refinance offer: 7.75% APR, 48 monthly payments. The $310 origination charge will be rolled into your new principal.",
+  "true_loan": {
+    "balance": 13908.2,
+    "annual_rate_pct": 10.25,
+    "remaining_months": 40,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.75,
+    "term_months": 48,
+    "fees": 310.0,
+    "fees_financed": true
+  },
+  "expect": {
+    "loan.remaining_months": "cleared"
+  }
+}

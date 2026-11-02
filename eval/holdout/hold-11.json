@@ -1,0 +1,18 @@
+{
+  "id": "hold-11",
+  "priority": "lowest_monthly_payment",
+  "loan_text": "Sandia Peak Bank auto loan. Payoff balance $27,999.99. APR 8.40%. 63 payments remaining. Prepayment penalty: $0.",
+  "offer_text": "Turquoise Trail Lending: slash your payment at 7.99% APR stretched across 84 months. No fees charged.",
+  "true_loan": {
+    "balance": 27999.99,
+    "annual_rate_pct": 8.4,
+    "remaining_months": 63,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.99,
+    "term_months": 84,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

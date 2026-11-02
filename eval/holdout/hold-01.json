@@ -1,0 +1,18 @@
+{
+  "id": "hold-01",
+  "priority": "lowest_total_cost",
+  "loan_text": "Lakeshore Community Credit Union, vehicle loan update. Principal outstanding: $24,310.00. Member 884102. Fixed interest rate: 9.25% APR. Billing periods left: 52 monthly payments. No penalty for paying off early.",
+  "offer_text": "Bluebonnet Bank refi proposal: 6.99% nominal APR, 60 monthly payments, $0 lender charges.",
+  "true_loan": {
+    "balance": 24310.0,
+    "annual_rate_pct": 9.25,
+    "remaining_months": 52,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.99,
+    "term_months": 60,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

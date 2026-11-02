@@ -1,0 +1,18 @@
+{
+  "id": "hold-07",
+  "priority": "lowest_total_cost",
+  "loan_text": "Saguaro National Bank car loan statement. Balance owing $17,033.10. Interest paid this year: $1,102.55. APR (fixed) 8.10 percent. Remaining: 39 mos. Early payout penalty: $95.",
+  "offer_text": "Cactus Federal refinance: 6.25 percent APR, 42 mos., $175 title fee out of pocket.",
+  "true_loan": {
+    "balance": 17033.1,
+    "annual_rate_pct": 8.1,
+    "remaining_months": 39,
+    "prepayment_penalty": 95.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.25,
+    "term_months": 42,
+    "fees": 175.0,
+    "fees_financed": false
+  }
+}

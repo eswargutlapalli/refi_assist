@@ -1,0 +1,21 @@
+{
+  "id": "hold-03",
+  "priority": "lowest_total_cost",
+  "loan_text": "Harborlight Federal auto loan notice. Outstanding principal $19,475.80, interest at 8.75 percent APR, 44 monthly payments to go. Early payoff charge: 3% of the outstanding principal.",
+  "offer_text": "Northgate Bank refinance: 6.49% APR, 48 monthly payments, no fees of any kind.",
+  "true_loan": {
+    "balance": 19475.8,
+    "annual_rate_pct": 8.75,
+    "remaining_months": 44,
+    "prepayment_penalty": 584.27
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.49,
+    "term_months": 48,
+    "fees": 0.0,
+    "fees_financed": null
+  },
+  "expect": {
+    "loan.prepayment_penalty": "cleared"
+  }
+}

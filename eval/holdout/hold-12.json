@@ -1,0 +1,18 @@
+{
+  "id": "hold-12",
+  "priority": "earliest_payoff",
+  "loan_text": "Juniper Federal Credit Union car loan. Balance $12,640.00. Rate 9.60% APR. 48 payments remaining. $25 prepayment fee.",
+  "offer_text": "Pecos River Bank: 8.20% APR, 36 monthly payments, $150 fee due at signing.",
+  "true_loan": {
+    "balance": 12640.0,
+    "annual_rate_pct": 9.6,
+    "remaining_months": 48,
+    "prepayment_penalty": 25.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 8.2,
+    "term_months": 36,
+    "fees": 150.0,
+    "fees_financed": false
+  }
+}

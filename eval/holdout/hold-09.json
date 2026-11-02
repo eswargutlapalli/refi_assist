@@ -1,0 +1,18 @@
+{
+  "id": "hold-09",
+  "priority": "lowest_total_cost",
+  "loan_text": "Plainsong Harvest Bank vehicle loan. Outstanding balance $8,150.25. Interest 9.90% APR. 28 payments remain. Early-payoff penalty: $650.",
+  "offer_text": "Frontier Trust refinance special: 5.49% APR, 36 payments, zero lender fees.",
+  "true_loan": {
+    "balance": 8150.25,
+    "annual_rate_pct": 9.9,
+    "remaining_months": 28,
+    "prepayment_penalty": 650.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 5.49,
+    "term_months": 36,
+    "fees": 0.0,
+    "fees_financed": null
+  }
+}

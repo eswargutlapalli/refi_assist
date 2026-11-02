@@ -1,0 +1,18 @@
+{
+  "id": "hold-08",
+  "priority": "lowest_total_cost",
+  "loan_text": "Riverbend Hollow Credit Union member auto loan. Current amount owed: $21,450.00. Annual percentage rate 7.90%. Payments remaining: 56. Prepayment penalty $0.",
+  "offer_text": "Alamo City Lending refinance: 6.10% APR for 60 months. A two hundred seventy-five dollar loan fee added to the loan.",
+  "true_loan": {
+    "balance": 21450.0,
+    "annual_rate_pct": 7.9,
+    "remaining_months": 56,
+    "prepayment_penalty": 0.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 6.1,
+    "term_months": 60,
+    "fees": 275.0,
+    "fees_financed": true
+  }
+}

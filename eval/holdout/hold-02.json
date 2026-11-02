@@ -1,0 +1,18 @@
+{
+  "id": "hold-02",
+  "priority": "earliest_payoff",
+  "loan_text": "Copper Canyon Auto Finance, your truck loan. Amount you still owe: $11,602.49. Contract rate 7.60% APR. Remaining schedule: 30 monthly payments. Early-payoff penalty: $50.00.",
+  "offer_text": "Mesa Verde Lending can refinance you at 7.10% APR with 60 monthly payments and a $275 documentation fee added to the balance.",
+  "true_loan": {
+    "balance": 11602.49,
+    "annual_rate_pct": 7.6,
+    "remaining_months": 30,
+    "prepayment_penalty": 50.0
+  },
+  "true_offer": {
+    "annual_rate_pct": 7.1,
+    "term_months": 60,
+    "fees": 275.0,
+    "fees_financed": true
+  }
+}
