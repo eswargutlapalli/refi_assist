@@ -1,10 +1,7 @@
-"""Walkthrough harness for engine.py. Convention for the whole build:
-
-- One `walkthrough_<module>.py` per module, kept next to the code.
-- It runs the REAL functions on a SYNTHETIC example and prints each call
-  with its inputs and outputs — never hand-filled numbers.
-- Rerun after every change to the module: `python3 walkthrough.py`.
-"""
+"""Walkthrough harness for engine.py. It runs the REAL functions on a
+SYNTHETIC example and prints each call with its inputs and outputs —
+never hand-filled numbers. Rerun after every change to the module:
+`python3 walkthrough_engine.py`."""
 
 from engine import (
     CurrentLoan,
