@@ -85,6 +85,13 @@ def _record_clean(tmp_path, script, sid="clean"):
     return rec, run_dir
 
 
+def test_record_all_refuses_empty_data_dir(tmp_path):
+    # An empty --data dir must fail loudly, never print a zero-call
+    # recording that looks like a clean run.
+    with pytest.raises(ValueError, match="no scenario files"):
+        record.record_all(tmp_path / "missing", tmp_path / "run", None)
+
+
 def test_scenarios_load_with_schema():
     files = sorted(SCENARIOS.glob("*.json"))
     assert len(files) == 13

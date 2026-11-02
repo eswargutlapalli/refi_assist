@@ -52,8 +52,12 @@ def load_scenario(path: str | Path) -> dict[str, Any]:
 
 def load_scenarios(data_dir: str | Path) -> list[dict[str, Any]]:
     """All scenarios in a dir, sorted by filename for stable run order."""
-    return [load_scenario(path)
-            for path in sorted(Path(data_dir).glob("*.json"))]
+    paths = sorted(Path(data_dir).glob("*.json"))
+    if not paths:
+        # A missing or moved --data dir must fail loudly here, never
+        # print a zero-call recording that looks like a clean run.
+        raise ValueError(f"no scenario files in {data_dir}")
+    return [load_scenario(path) for path in paths]
 
 
 def _require(scenario_id: str, side: str, terms: dict[str, Any],

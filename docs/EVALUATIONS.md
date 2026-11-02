@@ -59,15 +59,17 @@ tokens, summed across the run.
 
 ## 4. Run history
 
-| Metric | dev-01 | dev-02 | dev-03 | dev-04 |
-|---|---|---|---|---|
-| Grounded + correct | 82/98 (83.7%) | 94/98 (95.9%) | 95/98 (96.9%) | 96/98 (98.0%) |
-| Wrong-value | 0/104 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) |
-| Confirm-edit rate | 22/104 (21.2%) | 5/99 (5.1%) | 4/99 (4.0%) | 3/99 (3.0%) |
-| Explanation | 10 / 2 / 1 | 10 / 3 / 0 | 12 / 1 / 0 | 12 / 0 / 1 |
-| Verdict flips | 0 | 0 | 0 | 0 |
-| Cache ratio | 21228/30892 (68.7%) | 21906/24900 (88.0%) | 16507/23165 (71.3%) | 18216/28109 (64.8%) |
-| Model calls | 59 | 49 | 46 | 55 |
+| Metric | dev-01 | dev-02 | dev-03 | dev-04 | heldout-01 |
+|---|---|---|---|---|---|
+| Grounded + correct | 82/98 (83.7%) | 94/98 (95.9%) | 95/98 (96.9%) | 96/98 (98.0%) | 89/91 (97.8%) |
+| Correctly cleared | 0/0 | 0/0 | 0/0 | 0/0 | 2/2 (100.0%) |
+| Wrong-value | 0/104 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) | 0/99 (0.0%) | 0/91 (0.0%) |
+| Clear expected but grounded | 0/0 | 0/0 | 0/0 | 0/0 | 0/2 |
+| Confirm-edit rate | 22/104 (21.2%) | 5/99 (5.1%) | 4/99 (4.0%) | 3/99 (3.0%) | 2/91 (2.2%) |
+| Explanation | 10 / 2 / 1 | 10 / 3 / 0 | 12 / 1 / 0 | 12 / 0 / 1 | 12 / 0 / 0 |
+| Verdict flips | 0 | 0 | 0 | 0 | 0 |
+| Cache ratio | 21228/30892 (68.7%) | 21906/24900 (88.0%) | 16507/23165 (71.3%) | 18216/28109 (64.8%) | 15972/26125 (61.1%) |
+| Model calls | 59 | 49 | 46 | 55 | 51 |
 
 Explanation columns read verified / rewritten / template. Full per-scenario
 tables are in `docs/eval/dev-01-REPORT.md` through `docs/eval/dev-04-REPORT.md`.
@@ -123,6 +125,36 @@ The dev set found and fixed real problems: decisions 21 through 24 came out
 of dev-01 and dev-02 results, so dev numbers are optimistic. The held-out
 set was written separately and never seen during development. It runs once
 at the freeze and gets its own column.
+
+heldout-01 fills that column: 12 scenarios, recorded once. 89/91 fields
+grounded and correct; the other 2 were correctly cleared (expected
+abstentions the user types in), so every field the app was meant to read
+was read correctly. 0/91 wrong values. With 91 fields, the 95% upper
+bound on the wrong-value rate is about 3.3% (rule of three).
+
+On denominators: the correctness denominator counts stated fields — truth
+entries that are not None, plus one per must-choose scenario (stated fees
+with no stated method make the flag a field the user must choose). dev-04
+has 97 non-None truths plus 1 must-choose = 98. The wrong-value and
+confirm-edit denominator counts evaluated fields — every scored field
+(eight per scenario, seven when $0 fees mean the flag is never asked):
+dev-04 scores 104 truth slots minus 5 never-asked flags = 99. The two
+denominators differ by construction: unstated-but-scored fields count
+toward evaluated but not stated, while the must-choose flag counts toward
+stated. heldout-01 states all 91 scored truths with no must-choose
+scenario, so both denominators are 91: 89 grounded-correct plus
+2 correctly cleared.
+
+"Verified" covers both gates, not just the number check: the explainer
+ladder puts the accepted draft to the Baseten claim judge after the
+numbers pass, and a meaning flag or a judge outage falls back to the
+template. heldout-01 recorded 12/12 verified with no template reason, so
+the judge ran and passed on all twelve.
+
+Caveats: the held-out set was written by the developer after the dev
+rounds, never seen by the agent, and never used to change code. It is
+text only (vision has its own section, §6). Twelve scenarios, one
+recording — descriptive counts, not estimates.
 
 ## 6. Vision transcription check (Nov 1)
 
