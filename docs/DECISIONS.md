@@ -28,7 +28,7 @@ Short record: decision, reason, rejected alternative. Split order was provisiona
 
 Resolved: split order settled by grill decision 12 (rate-first over remaining term).
 
-## Verdict rules (Draft — grill in progress, 2026-10-28)
+## Verdict rules (settled 2026-10-28)
 
 7. Priorities are lowest total cost, lowest monthly payment, earliest payoff; default is lowest total cost.
    Reason: the default matches the tool's thesis (total-cost visibility); payment-first would repeat the lender framing.

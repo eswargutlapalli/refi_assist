@@ -1,27 +1,30 @@
 # refi_assist
 
 Consumer-facing educational tool that compares keeping an auto loan,
-refinancing now, and waiting under explicit rate scenarios — and proves
-every number it shows. Lender calculators show the lower monthly payment
+refinancing now, and waiting under explicit rate scenarios — and checks
+every number it shows against its source, with you confirming each one
+before anything is computed. Lender calculators show the lower monthly payment
 and hide the higher total cost; this tool makes the tradeoff visible,
 including how much of the difference comes from the rate, the term, and
 fees. Solo hackathon entry. All example loans and scenarios are
 synthetic; no real borrower data anywhere.
 
-Hosted app: https://<hosted-app-link> _(link to be added at deploy)_
+Hosted app: https://refiassist.streamlit.app/
 
 It is an educational estimator, not financial advice. It does not offer
-or broker loans, accept applications, or collect personal data.
+or broker loans or accept applications, and it stores nothing you enter:
+everything stays in session memory.
 
 ## How it works
 
 1. Paste or upload your statements. The model extracts the loan terms,
    each with the exact quote it was copied from.
-2. A code check confirms every quote really appears in your statements.
+2. A code check confirms every quote really appears in your statement
+   text (or its transcript, for photos and scans).
 3. You review, edit, and confirm every number on the confirm page. No
    computation runs on unconfirmed inputs.
 4. Local code computes the comparison, the rate/term/costs split, and the
-   verdict from fixed rules — the model never generates a number.
+   verdict from fixed rules — the model never computes a number.
 5. The model explains the verdict in plain language; code checks every
    number in the explanation, and the Baseten claim judge checks its
    meaning. The page states whether you are seeing the verified model
@@ -47,6 +50,22 @@ Full method, history, and caveats: [docs/EVALUATIONS.md](docs/EVALUATIONS.md).
 - heldout-01 (12 held-out scenarios, recorded once): 89/91 grounded and
   correct with the other 2 correctly cleared, 0 wrong values, 12/12
   verified (judge passed on all twelve), 0 verdict flips.
+- Claim judge: 6/6 caught on dev fixtures; on 8 held-out drafts, 3/4 bad
+  drafts caught with 0 false flags. The miss was a quiet reversal of the
+  verdict at the end of an accurate draft (see EVALUATIONS.md §5, §7).
+- Image path: two runs. The first scored 86/99 with 2 wrong; after a
+  renderer fix, the second scored 94/99 with 1 wrong, where vision
+  misread 46 as 48 and extraction faithfully copied the misread. That
+  is why every transcript is editable and every number goes through
+  the confirm page.
+
+## Tests and design record
+
+361 tests, offline-only: the suite never touches the network
+(`tests/conftest.py` blocks sockets, so any test that tried would fail
+instead of spending credit). Run it with `pytest` from the repo root.
+Design decisions with reasons live in [docs/DECISIONS.md](docs/DECISIONS.md);
+the rules the agent built under live in [AGENTS.md](AGENTS.md).
 
 ## Running locally
 
